@@ -4,6 +4,8 @@
 
 **Quick Start**: See [docs/QUICK_GUIDE.md](docs/QUICK_GUIDE.md) | **Deploy in 5 minutes** ⚡
 
+** Currently this contains only the code related to AWS AgentCore Runtime components, Other components code will be published soon. 
+
 
 ---
 
