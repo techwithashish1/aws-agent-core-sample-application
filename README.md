@@ -111,16 +111,10 @@ python src/main.py
 
 ---
 
-## Architecture
+## High Level Architecture
 
 ![alt text](docs/architecture.png)
 
-### High-Level Architecture
-
-```
-<img width="841" height="771" alt="image" src="https://github.com/user-attachments/assets/08b7002a-8d8d-4f4f-818b-1b97669e2b15" />
-
-```
 
 ### Deployment Architecture
 
