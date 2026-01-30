@@ -78,3 +78,16 @@ Pipfile.lock
 *.tmp
 temp/
 tmp/
+
+# Response/output files from testing
+src/response.json
+response.json
+*.output.json
+
+# Local test data
+*.local.json
+test_output/
+
+# Gateway configuration (contains credentials)
+gateway_config.json
+**/gateway_config.json
