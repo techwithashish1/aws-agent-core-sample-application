@@ -170,35 +170,6 @@ def agent_invocation(payload: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
 
-# Health check endpoint - Built-in health checks are provided by AgentCore
-# Custom health check decorator is not supported in this version
-# @app.healthcheck
-# def health_check() -> Dict[str, Any]:
-#     """
-#     Health check endpoint for AgentCore monitoring.
-#     
-#     Returns:
-#         dict: Health status information
-#     """
-#     try:
-#         # Verify agent can be initialized
-#         aws_agent = get_agent()
-#         
-#         return {
-#             "status": "healthy",
-#             "agent": settings.agent_name,
-#             "model": settings.bedrock_model_id,
-#             "region": settings.bedrock_region,
-#             "tools_count": len(aws_agent.tools)
-#         }
-#     except Exception as e:
-#         logger.error("health_check_failed", error=str(e))
-#         return {
-#             "status": "unhealthy",
-#             "error": str(e)
-#         }
-
-
 if __name__ == "__main__":
     """
     Run the AgentCore application.

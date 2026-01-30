@@ -1,5 +1,6 @@
 """Langgraph agent implementation for AWS resource management."""
 
+import os
 from typing import Dict, Any, List, Optional, TypedDict, Annotated, Sequence
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
@@ -25,11 +26,6 @@ from mcp_tools import (
     DescribeDynamoDBTableTool,
     DeleteDynamoDBTableTool,
     UpdateDynamoDBTableTool,
-)
-from mcp_tools.metrics_tools import (
-    GetS3MetricsTool,
-    GetLambdaMetricsTool,
-    GetDynamoDBMetricsTool,
 )
 from config import settings
 
@@ -187,44 +183,71 @@ def create_langchain_tools() -> List[BaseTool]:
         coroutine=create_tool_wrapper(ddb_update)
     ))
 
-    # Metrics Tools
-    s3_metrics = GetS3MetricsTool()
-    tools.append(StructuredTool.from_function(
-        name=s3_metrics.name,
-        description=s3_metrics.description,
-        args_schema=s3_metrics.input_model,
-        func=lambda **kwargs: str(s3_metrics.execute(s3_metrics.input_model(**kwargs))),
-        coroutine=create_tool_wrapper(s3_metrics)
-    ))
-
-    lambda_metrics = GetLambdaMetricsTool()
-    tools.append(StructuredTool.from_function(
-        name=lambda_metrics.name,
-        description=lambda_metrics.description,
-        args_schema=lambda_metrics.input_model,
-        func=lambda **kwargs: str(lambda_metrics.execute(lambda_metrics.input_model(**kwargs))),
-        coroutine=create_tool_wrapper(lambda_metrics)
-    ))
-
-    ddb_metrics = GetDynamoDBMetricsTool()
-    tools.append(StructuredTool.from_function(
-        name=ddb_metrics.name,
-        description=ddb_metrics.description,
-        args_schema=ddb_metrics.input_model,
-        func=lambda **kwargs: str(ddb_metrics.execute(ddb_metrics.input_model(**kwargs))),
-        coroutine=create_tool_wrapper(ddb_metrics)
-    ))
-
     return tools
+
+
+def load_gateway_tools() -> List[BaseTool]:
+    """Load tools from AgentCore Gateway.
+    
+    Returns:
+        List of LangChain tools from gateway, or empty list if unavailable
+    """
+    try:
+        from gateway_integration import MCPGatewayClient, create_gateway_tools
+        
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "agentcore_gateway",
+            "gateway_config.json"
+        )
+        
+        if not os.path.exists(config_path):
+            logger.warning("gateway_config_not_found", path=config_path)
+            return []
+        
+        logger.info("loading_gateway_config", path=config_path)
+        client = MCPGatewayClient.from_config(config_path)
+        logger.info("gateway_client_created", 
+                   gateway_url=client.gateway_url,
+                   token_url=client.cognito_token_url)
+        
+        tools = create_gateway_tools(client)
+        logger.info("gateway_tools_loaded", 
+                   count=len(tools), 
+                   tools=[t.name for t in tools])
+        return tools
+        
+    except ImportError as e:
+        logger.warning("gateway_integration_not_available", error=str(e))
+        return []
+    except Exception as e:
+        import traceback
+        logger.error("gateway_tools_load_failed", 
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    traceback=traceback.format_exc())
+        return []
 
 
 class AWSResourceAgent:
     """AWS Resource Management Agent using Langgraph."""
 
-    def __init__(self):
-        """Initialize the agent."""
+    def __init__(self, include_gateway_tools: bool = True):
+        """Initialize the agent.
+        
+        Args:
+            include_gateway_tools: Whether to include tools from AgentCore Gateway
+        """
         self.logger = logger.bind(component="aws_resource_agent")
         self.tools = create_langchain_tools()
+        
+        # Add gateway tools if enabled
+        if include_gateway_tools:
+            gateway_tools = load_gateway_tools()
+            if gateway_tools:
+                self.tools.extend(gateway_tools)
+                self.logger.info("gateway_tools_added", count=len(gateway_tools))
+        
         self.llm = create_bedrock_llm()
         
         # Bind tools to LLM for function calling
