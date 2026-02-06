@@ -30,8 +30,17 @@ async def main():
     # Example usage
     print("AWS Resource Manager - Agentic AI Application")
     
+    # Show memory status
+    session_info = agent.get_session_info()
+    if session_info.get("memory_enabled"):
+        print(f"Memory enabled - Session: {session_info.get('session_id')}")
+    else:
+        print("Memory: disabled (set MEMORY_ID to enable)")
+    
     # Interactive mode
-    print("Enter commands or type quit to exit")
+    print("\nEnter commands or type 'quit' to exit")
+    print("Type 'new session' to start a fresh memory session")
+    print("Type 'session info' to view memory session details\n")
     
     while True:
         try:
@@ -42,6 +51,20 @@ async def main():
                 break
             
             if not user_input:
+                continue
+            
+            # Handle special commands
+            if user_input.lower() == 'new session':
+                new_session_id = agent.new_session()
+                if new_session_id:
+                    print(f"Started new session: {new_session_id}")
+                else:
+                    print("Memory is not enabled.")
+                continue
+            
+            if user_input.lower() == 'session info':
+                info = agent.get_session_info()
+                print(f"Memory Info: {info}")
                 continue
             
             # Execute command

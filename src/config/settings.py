@@ -8,12 +8,12 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # AWS Configuration
-    aws_region: str = "us-east-1"
+    aws_region: str = "ap-south-1"
     aws_account_id: Optional[str] = None
 
     # AWS Bedrock Configuration
     bedrock_model_id: str = "anthropic.claude-3-sonnet-20240229-v1:0"
-    bedrock_region: str = "us-east-1"
+    bedrock_region: str = "ap-south-1"
     max_tokens: int = 4096
     temperature: float = 0.7
 
@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # Security
     enable_audit_logging: bool = True
     require_approval_for_destructive_operations: bool = True
+
+    # AgentCore Memory Configuration
+    memory_enabled: bool = True
+    memory_name: Optional[str] = None  # Defaults to agent_name-memory
+    memory_id: Optional[str] = None  # Set after memory creation
+    memory_event_expiry_days: int = 7
+    memory_region: Optional[str] = None  # Defaults to aws_region
 
     model_config = SettingsConfigDict(
         env_file=".env",

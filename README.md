@@ -12,9 +12,10 @@
 
 1. [Overview](#overview)
 2. [Two Tool Architecture](#two-tool-architecture)
-3. [Architecture](#architecture)
-4. [Project Structure](#project-structure)
-5. [Getting Started](#getting-started)
+3. [AgentCore Memory](#agentcore-memory)
+4. [Architecture](#architecture)
+5. [Project Structure](#project-structure)
+6. [Getting Started](#getting-started)
 
 ---
 
@@ -37,6 +38,7 @@ This application provides an **AI-powered interface** to manage AWS resources th
 ✅ **Natural Language Interface**: Interact with AWS using plain English  
 ✅ **AgentCore Gateway**: Secure MCP tool exposure with Cognito JWT authentication  
 ✅ **AgentCore Identity**: Workload identity with OAuth2 token exchange  
+✅ **AgentCore Memory**: Short-term and long-term memory for conversation context  
 ✅ **S3 Management**: Create, configure, manage buckets (bucket-level only)  
 ✅ **Lambda Management**: Create, update, manage Lambda functions  
 ✅ **DynamoDB Management**: Create, configure tables (table-level only)  
@@ -54,6 +56,7 @@ This application provides an **AI-powered interface** to manage AWS resources th
 | **Tools Protocol** | Model Context Protocol (MCP) | Standardized tool interface |
 | **Gateway** | AWS Bedrock AgentCore Gateway | Secure MCP tool exposure with JWT auth |
 | **Identity** | AWS Bedrock AgentCore Identity | Workload identity & token exchange |
+| **Memory** | AWS Bedrock AgentCore Memory | Short-term & long-term conversation memory |
 | **Deployment** | AWS Bedrock Agent Core | Production runtime environment |
 | **Language** | Python 3.11+ | Core implementation |
 | **AWS SDK** | Boto3 1.34+ | AWS service integration |
@@ -104,6 +107,44 @@ These tools access existing APIs exposed through AgentCore Gateway with authenti
 **When to Use Each:**
 - **Local Tools**: Use for AWS operations where you want direct SDK access and custom logic (create, update, delete resources)
 - **Gateway Tools**: Use to access existing APIs (like metrics endpoints) without modifying the API code. Authentication is handled by AgentCore Identity, making it secure and auditable.
+
+---
+
+## AgentCore Memory
+
+AgentCore Memory enables the agent to maintain **conversation context** over time for personalized experiences.
+
+### Memory Types
+
+| Type | Description | Expiry |
+|------|-------------|--------|
+| **Short-Term** | Session-based conversation context | 7 days |
+| **Long-Term** | Persistent facts, preferences, and summaries | 30 days |
+
+### Long-Term Memory Strategies
+
+| Strategy | Purpose |
+|----------|---------|
+| **SEMANTIC** | Stores facts with vector embeddings for similarity search |
+| **SUMMARY** | Creates conversation summaries per session |
+| **USER_PREFERENCE** | Tracks user preferences and settings |
+
+### Quick Setup
+
+```bash
+cd src
+
+# Short-term memory (session context)
+python -m memory.setup_memory --type short-term --region ap-south-1
+
+# Long-term memory (with extraction strategies)
+python -m memory.setup_memory --type long-term --region ap-south-1
+
+# List existing memories
+python -m memory.setup_memory --list --region ap-south-1
+```
+
+See [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md#agentcore-memory-setup) for detailed setup instructions.
 
 ---
 
@@ -183,6 +224,7 @@ The system uses **Langchain + Langgraph + AWS Bedrock** at key integration point
 | `src/gateway_integration/` | **Gateway Tools** - Client and LangChain wrappers for external APIs |
 | `src/config/` | Application configuration |
 | `src/utils/` | Utility functions |
+| `src/memory/` | AgentCore Memory integration (short-term & long-term) |
 | `docs/` | Documentation files |
 
 ---
@@ -200,6 +242,7 @@ The system uses **Langchain + Langgraph + AWS Bedrock** at key integration point
 - **AWS Bedrock Docs**: https://docs.aws.amazon.com/bedrock/
 - **AWS Bedrock AgentCore**: https://docs.aws.amazon.com/bedrock/latest/userguide/agents-core.html
 - **AgentCore Samples**: https://github.com/awslabs/amazon-bedrock-agentcore-samples
+- **AgentCore Memory Tutorials**: https://github.com/awslabs/amazon-bedrock-agentcore-samples/tree/main/01-tutorials/04-AgentCore-memory
 - **Langchain Docs**: https://python.langchain.com/
 - **Langgraph Docs**: https://langchain-ai.github.io/langgraph/
 - **MCP Protocol**: https://modelcontextprotocol.io/

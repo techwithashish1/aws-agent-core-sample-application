@@ -14,7 +14,8 @@ This guide covers deploying the AWS Resource Manager agent to AWS Bedrock AgentC
 2. [Quick Start](#quick-start)
 3. [Detailed Deployment Steps](#detailed-deployment-steps)
 4. [AgentCore Gateway Setup](#agentcore-gateway-setup)
-5. [AgentCore Identity](#agentcore-identity)
+5. [AgentCore Memory Setup](#agentcore-memory-setup)
+6. [AgentCore Identity](#agentcore-identity)
 6. [Common Commands](#common-commands)
 7. [Configuration](#configuration)
 8. [Monitoring & Operations](#monitoring--operations)
@@ -81,7 +82,20 @@ This creates:
 - **IAM Target**: For AWS service endpoints (S3, DynamoDB, Lambda)
 - **API Key Target**: For custom API endpoints
 
-### Step 4: Deploy Agent
+### Step 4: Setup AgentCore Memory (Optional)
+
+```bash
+# Create short-term memory (session context)
+python -m memory.setup_memory --type short-term --region ap-south-1
+
+# Or create long-term memory (with extraction strategies)
+python -m memory.setup_memory --type long-term --region ap-south-1
+```
+
+See [AgentCore Memory Setup](#agentcore-memory-setup) for details.
+
+
+### Step 5: Deploy Agent
 
 ```bash
 cd ../  # Back to src directory
@@ -89,7 +103,9 @@ agentcore configure -e agentcore_entrypoint.py
 agentcore deploy
 ```
 
-### Step 5: Test
+
+
+### Step 6: Test
 
 ```bash
 agentcore invoke '{"prompt":"List all S3 buckets"}'
@@ -239,6 +255,101 @@ After setup, a `gateway_config.json` file is generated containing:
 ### Using Gateway Tools
 
 Initialize the `AWSResourceAgent` with `include_gateway_tools=True` to enable gateway-exposed MCP tools.
+
+---
+
+## AgentCore Memory Setup
+
+AgentCore Memory enables agents to maintain **conversation context** over time, remember important facts, and deliver consistent, personalized experiences.
+
+### Why Use AgentCore Memory?
+
+| Challenge | Memory Solution |
+|-----------|-----------------|
+| **Context Loss** | Maintains conversation history across sessions |
+| **User Preferences** | Remembers user-specific settings and choices |
+| **Multi-Step Operations** | Tracks complex workflows across multiple interactions |
+| **Personalization** | Enables personalized responses based on past interactions |
+
+### Memory Types
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| **Short-Term** | Session-based context, raw event storage | Conversation continuity within a session |
+| **Long-Term** | Persistent memory with extraction strategies | Cross-session preferences, facts, summaries |
+
+### Memory Strategies (Long-Term)
+
+| Strategy | Purpose |
+|----------|---------|
+| **SEMANTIC** | Stores factual information with vector embeddings for similarity search |
+| **SUMMARY** | Creates and maintains conversation summaries |
+| **USER_PREFERENCE** | Tracks user-specific preferences and settings |
+| **CUSTOM** | Custom extraction and consolidation logic |
+
+### Setup Steps
+
+#### Option 1: Create Short-Term Memory
+
+Short-term memory stores raw conversation events for session continuity:
+
+```bash
+cd src
+python -m memory.setup_memory --type short-term --region ap-south-1
+```
+
+**Creates:**
+- Memory resource with 7-day event expiry
+- No extraction strategies (raw events only)
+
+#### Option 2: Create Long-Term Memory
+
+Long-term memory with automatic extraction strategies:
+
+```bash
+cd src
+python -m memory.setup_memory --type long-term --region ap-south-1
+```
+
+**Creates:**
+- Memory resource with 30-day event expiry
+- SEMANTIC strategy for factual information
+- SUMMARY strategy for conversation summaries
+- USER_PREFERENCE strategy for user settings
+
+### Memory Management Commands
+
+```bash
+# List all memories
+python -m memory.setup_memory --list --region ap-south-1
+
+# Delete a memory
+python -m memory.setup_memory --delete <memory-id> --region ap-south-1
+```
+
+### Memory Configuration
+
+Memory settings can be configured in `src/config/settings.py`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `memory_enabled` | `True` | Enable/disable memory |
+| `memory_name` | `None` | Custom memory name (defaults to agent_name) |
+| `memory_id` | `None` | Memory ID (set after creation) |
+| `memory_event_expiry_days` | `7` | Days before events expire |
+| `memory_region` | `None` | AWS region (defaults to aws_region) |
+
+### Memory Naming Constraints
+
+Memory names must match the pattern: `[a-zA-Z][a-zA-Z0-9_]{0,47}`
+- Must start with a letter
+- Only letters, numbers, and underscores allowed
+- Maximum 48 characters
+
+### Reference
+
+For more information on AgentCore Memory:
+- [AgentCore Memory Samples](https://github.com/awslabs/amazon-bedrock-agentcore-samples/tree/main/01-tutorials/04-AgentCore-memory)
 
 ---
 

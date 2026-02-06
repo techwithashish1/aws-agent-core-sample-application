@@ -98,7 +98,17 @@ def agent_invocation(payload: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     # Extract prompt from payload
     prompt = payload.get("prompt", payload.get("input", ""))
-    session_id = payload.get("session_id", "default")
+    
+    # Get session_id from payload or context (AgentCore provides session info)
+    # AgentCore context provides request_id and session info
+    session_id = payload.get("session_id")
+    if not session_id:
+        # Try to get from context (AgentCore runtime provides this)
+        session_id = getattr(context, 'session_id', None) or getattr(context, 'request_id', 'default')
+    
+    # Use a consistent actor_id (based on agent name for multi-user scenarios, 
+    # or could be extracted from payload/context if available)
+    actor_id = payload.get("actor_id", f"{settings.agent_name}_user")
     
     if not prompt:
         logger.warning("no_prompt_found", payload=payload)
@@ -122,6 +132,9 @@ def agent_invocation(payload: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Get agent instance
         aws_agent = get_agent()
         
+        # Set memory session for this invocation (maintains conversation context)
+        aws_agent.set_session(session_id=session_id, actor_id=actor_id)
+        
         # Execute agent (using asyncio since our agent is async)
         result = asyncio.run(aws_agent.execute(prompt))
         
@@ -142,7 +155,9 @@ def agent_invocation(payload: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "region": settings.bedrock_region,
                 "request_id": getattr(context, 'request_id', 'unknown'),
                 "execution_time_ms": round(execution_time, 2),
-                "session_id": session_id
+                "session_id": session_id,
+                "actor_id": actor_id,
+                "memory_enabled": settings.memory_enabled
             }
         }
         
