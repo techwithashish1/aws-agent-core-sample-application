@@ -3,6 +3,7 @@ Utility functions for AgentCore Gateway setup.
 Based on AWS AgentCore samples: https://github.com/awslabs/amazon-bedrock-agentcore-samples
 """
 
+import os
 import boto3
 import json
 import time
@@ -28,7 +29,7 @@ def get_or_create_user_pool(cognito, USER_POOL_NAME):
             domain = user_pool.get('Domain')
             
             if domain:
-                region = user_pool_id.split('_')[0] if '_' in user_pool_id else 'us-east-1'
+                region = user_pool_id.split('_')[0] if '_' in user_pool_id else 'ap-south-1'
                 domain_url = f"https://{domain}.auth.{region}.amazoncognito.com"
                 print(f"Found domain for user pool {user_pool_id}: {domain} ({domain_url})")
             else:
@@ -149,17 +150,19 @@ def get_token(user_pool_id: str, client_id: str, client_secret: str, scope_strin
         return {"error": str(err)}
 
 
-def create_agentcore_gateway_role(gateway_name):
+def create_agentcore_gateway_role(gateway_name, region=None):
     """
     Create an IAM Role for AgentCore Gateway.
     
     :param gateway_name: Name for the gateway (used in role naming)
+    :param region: AWS region (optional, defaults to boto session region)
     :return: IAM Role details
     """
     iam_client = boto3.client('iam')
     agentcore_gateway_role_name = f'agentcore-{gateway_name}-role'
     boto_session = Session()
-    region = boto_session.region_name
+    # Use provided region, or fall back to session region, or environment variable
+    region = region or boto_session.region_name or os.environ.get('AWS_REGION', 'ap-south-1')
     account_id = boto3.client("sts").get_caller_identity()["Account"]
     
     role_policy = {

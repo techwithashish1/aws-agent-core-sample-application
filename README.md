@@ -1,20 +1,24 @@
-# AWS Resource Manager - Agentic AI Application
+# AWS Resource Manager - Complete AgentCore Reference Implementation
 
-> An intelligent AWS resource management application powered by AWS Bedrock LLM, Langchain/Langgraph agents, and MCP tools for natural language-based infrastructure management.
+> A comprehensive **AWS Bedrock AgentCore** reference implementation demonstrating **all five AgentCore components**: Runtime, Gateway, Identity, Memory, and Policy. This application provides an AI-powered interface to manage AWS resources through natural language interactions.
 
-**Quick Start**: See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | **Deploy in 5 minutes** ⚡
-
-> **Note**: Currently this contains only the code related to AWS AgentCore Runtime, Gateway and Identity components. The code for the External APIs (Resource Utilization Reporting) is available at: [https://github.com/techwithashish1/resource-utlization-reporting-app](https://github.com/techwithashish1/resource-utlization-reporting-app)
+**Quick Start**: See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for setup and deployment instructions ⚡
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Two Tool Architecture](#two-tool-architecture)
-3. [Architecture](#architecture)
+2. [Architecture](#architecture)
+3. [AWS AgentCore Components](#aws-agentcore-components)
+   - [AgentCore Runtime](#agentcore-runtime)
+   - [AgentCore Gateway](#agentcore-gateway)
+   - [AgentCore Identity](#agentcore-identity)
+   - [AgentCore Memory](#agentcore-memory)
+   - [AgentCore Policy](#agentcore-policy)
 4. [Project Structure](#project-structure)
-5. [Getting Started](#getting-started)
+5. [Documentation](#documentation)
+6. [Support](#support)
 
 ---
 
@@ -22,27 +26,27 @@
 
 ### What is This?
 
-This application provides an **AI-powered interface** to manage AWS resources through natural language interactions. It uses **AWS Bedrock LLM models** (Claude 3 Sonnet) to understand commands and orchestrate AWS operations through a **Langgraph state machine** with **Langchain tool integration** and **MCP (Model Context Protocol) tools**. This application demonstrate how to use and expose existing API's to Agents deployed on AWS AgentCore Runtime without changing the API. 
+This application is a **complete reference implementation** of all AWS Bedrock AgentCore components. It demonstrates how to build a production-ready AI agent that:
 
-**Architecture Highlights:**
-- 🤖 **Langgraph StateGraph**: Multi-step agent workflow with conditional routing
-- 🔗 **Langchain Integration**: ChatBedrock wrapper with tool binding
-- ⚡ **Claude 3 Sonnet**: AWS Bedrock LLM for reasoning and decision-making
-- 🛠️ **Two Tool Sets**: Local tools (built-in) + Gateway tools (external APIs)
-- 🌐 **AgentCore Gateway**: Exposes existing APIs as MCP tools with JWT authentication
-- 🔐 **AgentCore Identity**: Workload identity & token exchange for secure API access
+- **Manages AWS Resources** through natural language (S3, Lambda, DynamoDB)
+- **Exposes Existing APIs** as MCP tools without modifying API code
+- **Authenticates Securely** using workload identity and token exchange
+- **Remembers Conversations** with short-term and long-term memory
+- **Enforces Guardrails** with Cedar policy-based access control
 
 ### Key Features
 
-✅ **Natural Language Interface**: Interact with AWS using plain English  
-✅ **AgentCore Gateway**: Secure MCP tool exposure with Cognito JWT authentication  
-✅ **AgentCore Identity**: Workload identity with OAuth2 token exchange  
-✅ **S3 Management**: Create, configure, manage buckets (bucket-level only)  
-✅ **Lambda Management**: Create, update, manage Lambda functions  
-✅ **DynamoDB Management**: Create, configure tables (table-level only)  
-✅ **Metrics & Monitoring**: Retrieve CloudWatch metrics via gateway  
-✅ **No Data Operations**: Infrastructure-only (no S3 objects, no DynamoDB scans)  
-✅ **Production Ready**: Deploy on AWS Bedrock Agent Core in minutes  
+| Feature | AgentCore Component | Description |
+|---------|---------------------|-------------|
+| **Natural Language Interface** | Runtime | Interact with AWS using plain English |
+| **MCP Tool Exposure** | Gateway | Expose existing APIs as standardized tools |
+| **Secure Authentication** | Identity | Workload identity with OAuth2 token exchange |
+| **Conversation Memory** | Memory | Session context and personalized experiences |
+| **Access Control** | Policy | Cedar-based guardrails and access restrictions |
+| **S3 Management** | Runtime + Tools | Create, configure, manage S3 buckets |
+| **Lambda Management** | Runtime + Tools | Create, update, manage Lambda functions |
+| **DynamoDB Management** | Runtime + Tools | Create, configure DynamoDB tables |
+| **Metrics & Monitoring** | Gateway | Retrieve CloudWatch metrics via external APIs |
 
 ### Technology Stack
 
@@ -52,122 +56,213 @@ This application provides an **AI-powered interface** to manage AWS resources th
 | **Agent Orchestration** | Langgraph 0.0.40+ | State machine workflow & routing |
 | **LLM Integration** | Langchain 0.1+ | LLM wrapper, tools, prompts |
 | **Tools Protocol** | Model Context Protocol (MCP) | Standardized tool interface |
-| **Gateway** | AWS Bedrock AgentCore Gateway | Secure MCP tool exposure with JWT auth |
+| **Runtime** | AWS Bedrock AgentCore Runtime | Production execution environment |
+| **Gateway** | AWS Bedrock AgentCore Gateway | MCP tool exposure with OpenAPI integration |
 | **Identity** | AWS Bedrock AgentCore Identity | Workload identity & token exchange |
-| **Deployment** | AWS Bedrock Agent Core | Production runtime environment |
+| **Memory** | AWS Bedrock AgentCore Memory | Conversation context & personalization |
+| **Policy** | AWS Bedrock AgentCore Policy | Cedar-based access control |
 | **Language** | Python 3.11+ | Core implementation |
 | **AWS SDK** | Boto3 1.34+ | AWS service integration |
 
 ---
 
-## Two Tool Architecture
-
-This application uses **two distinct sets of tools** that the agent can invoke:
-
-| Aspect | Local Tools | Gateway Tools |
-|--------|-------------|---------------|
-| **Location** | Built into agent code (`src/mcp_tools/`) | Existing APIs exposed via Gateway |
-| **Authentication** | Direct AWS SDK credentials | AgentCore Identity → Cognito JWT |
-| **Implementation** | Custom Python code with Boto3 | Existing API endpoints (no code changes) |
-| **Use Case** | Direct AWS operations, development | Production APIs, external services |
-| **Setup Required** | None (included in agent) | Gateway + Identity configuration |
-
-### Local Tools (Built-in)
-
-These tools are implemented directly in the agent code and use AWS SDK (Boto3) for execution:
-
-| Service | Tools |
-|---------|-------|
-| **S3** | `ListS3Buckets`, `CreateS3Bucket`, `DeleteS3Bucket`, `GetS3BucketInfo` |
-| **Lambda** | `ListLambdaFunctions`, `CreateLambdaFunction`, `UpdateLambdaConfig`, `DeleteLambdaFunction`, `GetLambdaFunctionInfo` |
-| **DynamoDB** | `ListDynamoDBTables`, `CreateDynamoDBTable`, `DescribeDynamoDBTable`, `UpdateDynamoDBTable`, `DeleteDynamoDBTable` |
-
-### Gateway Tools (External APIs)
-
-These tools access existing APIs exposed through AgentCore Gateway with authentication managed by AgentCore Identity:
-
-**IAM Authentication (AWS Service Metrics):**
-| Endpoint | Description |
-|----------|-------------|
-| `/api/metrics/s3` | List all S3 bucket metrics |
-| `/api/metrics/s3/{bucket_name}` | Get metrics for specific S3 bucket |
-| `/api/metrics/lambda` | List all Lambda function metrics |
-| `/api/metrics/lambda/{function_name}` | Get metrics for specific Lambda function |
-| `/api/metrics/dynamodb` | List all DynamoDB table metrics |
-| `/api/metrics/dynamodb/{table_name}` | Get metrics for specific DynamoDB table |
-
-**API Key Authentication (Custom Reports):**
-| Endpoint | Description |
-|----------|-------------|
-| `/api/metrics/report` | Generate consolidated metrics report |
-
-**When to Use Each:**
-- **Local Tools**: Use for AWS operations where you want direct SDK access and custom logic (create, update, delete resources)
-- **Gateway Tools**: Use to access existing APIs (like metrics endpoints) without modifying the API code. Authentication is handled by AgentCore Identity, making it secure and auditable.
-
----
 
 ## Architecture
 
 ### High Level Architecture
 
-![Architecture Diagram](docs/architecture_1.png)
 
-The architecture diagram shows the complete flow of the AWS Resource Manager application:
+<p align="center">
+  <img src="docs/agentcore_architecture.png" alt="Architecture Diagram" style="max-width: 100%;">
+</p>
 
-**User Input → AgentCore Runtime (Langgraph + Langchain) → Tool Execution → Response**
 
-#### Core Components
+---
 
-| Component | Role |
-|-----------|------|
-| **User Input** | Natural language requests (e.g., "Create S3 bucket with versioning", "Pull metrics for S3 bucket xyz") |
-| **AgentCore Runtime** | Hosts the agent code with Langgraph (state orchestration) + Langchain (LLM wrapper) + MCP Tools |
-| **Bedrock LLM** | Claude 3 Sonnet for ReAct-based reasoning on user input |
-| **MCP Tools (Local)** | Direct AWS operations via Boto3 (S3, Lambda, DynamoDB CRUD) |
-| **AgentCore Gateway** | Exposes existing APIs as MCP tools with OpenAPI spec integration |
-| **AgentCore Identity** | Token exchange with AWS Cognito for secure JWT authentication |
-| **Existing APIs** | API Gateway → Lambda functions for metrics endpoints |
+## AWS AgentCore Components
 
-#### Framework Roles
+This application demonstrates the complete AWS AgentCore ecosystem with all five components working together.
 
-- **Langgraph**: State machine orchestration (nodes, edges, routing)
-- **Langchain**: LLM wrapper & tool integration (ChatBedrock, tool binding)
-- **MCP/Tools**: Tool protocol implementation (AWS operation tools)
+### AgentCore Runtime
 
-#### Request Flow
+**AgentCore Runtime** is the production execution environment for AI agents.
 
-1. **User** sends natural language request
-2. **AgentCore Runtime** receives the request and initializes the agent
+| Feature | Description |
+|---------|-------------|
+| **Container Deployment** | Runs your agent code in a managed Docker container |
+| **Invocation Endpoint** | Provides a secure endpoint for agent invocations |
+| **Environment Isolation** | Each agent runs in isolated environment |
+| **Scaling** | Automatic scaling based on invocation load |
+| **Logging** | CloudWatch integration for logs and monitoring |
+
+**Key Files:**
+- [agentcore_entrypoint.py](src/agentcore_entrypoint.py) - Main handler invoked by AgentCore Runtime
+- [agent/aws_agent.py](src/agent/aws_agent.py) - Langgraph StateGraph with ReAct reasoning
+- `.bedrock_agentcore.yaml` - Agent configuration and deployment settings
+
+→ **Setup**: See [DEPLOYMENT_GUIDE.md - Quick Start](docs/DEPLOYMENT_GUIDE.md#quick-start)
+
+---
+
+### AgentCore Gateway
+
+**AgentCore Gateway** exposes existing APIs as MCP (Model Context Protocol) tools without modifying the original API code.
+
+| Feature | Description |
+|---------|-------------|
+| **OpenAPI Integration** | Automatically converts OpenAPI specs to MCP tools |
+| **Multiple Targets** | Support for multiple API endpoints and authentication types |
+| **JWT Authentication** | Cognito-based OAuth2 token validation |
+| **IAM Authentication** | AWS SigV4 signing for AWS service endpoints |
+| **API Key Support** | API key-based authentication for third-party APIs |
+
+**Target Types:**
+
+| Target Type | Authentication | Use Case |
+|-------------|----------------|----------|
+| **IAM Target** | AWS SigV4 | AWS services, API Gateway with IAM auth |
+| **API Key Target** | API Key header | Third-party APIs, custom endpoints |
+| **OAuth Target** | Bearer token | OAuth2-protected APIs |
+
+**Gateway Tools Exposed:**
+
+| Tool Name | Target | Description |
+|-----------|--------|-------------|
+| `Get_All_S3_Metrics` | IAM | Get metrics for all S3 buckets |
+| `Get_All_Lambda_Metrics` | IAM | Get metrics for all Lambda functions |
+| `Get_Lambda_Function_Metrics` | IAM | Get metrics for specific Lambda |
+| `Get_Metrics_Report` | API Key | Generate consolidated metrics report |
+
+→ **Setup**: See [DEPLOYMENT_GUIDE.md - Gateway Setup](docs/DEPLOYMENT_GUIDE.md#agentcore-gateway-setup)
+
+---
+
+### AgentCore Identity
+
+**AgentCore Identity** provides secure workload identity for agents, enabling OAuth2 token exchange with external identity providers like AWS Cognito.
+
+| Feature | Description |
+|---------|-------------|
+| **Workload Identity** | Agent-specific identity without embedding credentials |
+| **Token Exchange** | Exchange agent credentials for external tokens |
+| **OAuth2 Support** | Client credentials flow with Cognito |
+| **Automatic Refresh** | Token caching and automatic refresh |
+| **Audit Trail** | All token exchanges are logged |
+
+**Token Exchange Flow:**
+
+```
+Agent Runtime → AgentCore Identity → AWS Cognito → JWT Token → Gateway Access
+```
+
+1. Agent requests token for gateway access
+2. Identity service exchanges credentials with Cognito
+3. JWT token returned to agent
+4. Agent uses JWT to call Gateway
+
+→ **Setup**: See [DEPLOYMENT_GUIDE.md - Identity](docs/DEPLOYMENT_GUIDE.md#agentcore-identity)
+
+---
+
+### AgentCore Memory
+
+**AgentCore Memory** enables agents to maintain conversation context, remember user preferences, and deliver personalized experiences over time.
+
+| Feature | Description |
+|---------|-------------|
+| **Short-Term Memory** | Session-based conversation context (7 days) |
+| **Long-Term Memory** | Persistent facts, preferences, summaries (30 days) |
+| **Session Management** | Group conversations by session ID |
+| **Actor Tracking** | Track different users/actors |
+| **Extraction Strategies** | Automatic extraction of facts and summaries |
+
+**Memory Types:**
+
+| Type | Expiry | Strategies | Use Case |
+|------|--------|------------|----------|
+| **Short-Term** | 7 days | None (raw events) | Session context, conversation continuity |
+| **Long-Term** | 30 days | SEMANTIC, SUMMARY, USER_PREFERENCE | Cross-session personalization |
+
+**How It Works:**
+- Pass `session_id` in the request payload
+- Agent loads conversation history from memory
+- Context injected into system prompt
+- After response, conversation stored to memory
+
+→ **Setup**: See [DEPLOYMENT_GUIDE.md - Memory Setup](docs/DEPLOYMENT_GUIDE.md#agentcore-memory-setup)
+
+---
+
+### AgentCore Policy
+
+**AgentCore Policy** provides guardrails and access control for agent tool invocations using **Cedar policies**. It enables fine-grained control over what actions agents can perform.
+
+| Feature | Description |
+|---------|-------------|
+| **Cedar Policies** | Declarative policy language for access control |
+| **ENFORCE Mode** | Block actions that violate policies |
+| **LOG_ONLY Mode** | Audit mode for testing policies |
+| **NL2Cedar** | Generate Cedar policies from natural language |
+| **Principal Tags** | Role-based access using JWT claims |
+| **Context Conditions** | Access control based on tool input parameters |
+
+**Policy Enforcement Modes:**
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| **ENFORCE** | Block violating actions, deny by default | Production |
+| **LOG_ONLY** | Log violations, allow execution | Testing, auditing |
+
+**Pre-Built Policy Templates:**
+
+| Template | Purpose |
+|----------|---------|
+| `region-restriction` | Limit tools to specific AWS regions |
+| `destructive-ops` | Block delete operations on protected resources |
+| `role-based` | Require specific principal tags for actions |
+| `parameter-limits` | Enforce numeric parameter constraints |
+
+**Action Naming Convention:**
+Gateway tool actions follow the format: `<target-name>___<tool-name>` (triple underscore)
+
+Example: `resource-metrics-iam-target___Get_All_S3_Metrics`
+
+→ **Setup**: See [DEPLOYMENT_GUIDE.md - Policy Setup](docs/DEPLOYMENT_GUIDE.md#agentcore-policy-setup)
+
+---
+
+### Request Flow
+
+1. **User** sends natural language request with optional `session_id`
+2. **AgentCore Runtime** receives request, loads **Memory** context
 3. **Bedrock LLM** (Claude 3) performs ReAct reasoning to understand intent
 4. Agent selects appropriate **tool** based on the request:
 
-   **Path A - Local Tools (Direct AWS Operations):**
-   - Agent invokes MCP Tool (e.g., `CreateS3Bucket`, `ListLambdaFunctions`)
+   **Path A - Local Tools:**
+   - Agent invokes MCP Tool (e.g., `CreateS3Bucket`)
    - Tool executes via Boto3 directly against AWS services
-   - Result returns to agent for response generation
+   - Result returns to agent
 
-   **Path B - Gateway Tools (External APIs):**
-   - Agent requests token from **AgentCore Identity**
-   - Identity exchanges credentials with **AWS Cognito** for JWT token
-   - Agent calls **AgentCore Gateway** with OpenAPI spec and JWT auth
-   - Gateway routes to **API Gateway** → **Lambda** for metrics/reports
-   - Result returns to agent for response generation
+   **Path B - Gateway Tools:**
+   - **AgentCore Identity** provides JWT token
+   - **AgentCore Policy** evaluates Cedar policies
+   - If permitted, **AgentCore Gateway** routes to external API
+   - Result returns to agent
 
-5. **Bedrock LLM** generates natural language response
-6. **User** receives the final response
+5. **AgentCore Memory** stores conversation
+6. **User** receives natural language response
 
-### LLM Integration Points
+---
 
-The system uses **Langchain + Langgraph + AWS Bedrock** at key integration points:
+### Component Dependencies
 
-| File | Purpose | Framework |
-|------|---------|-----------|
-| `src/config/settings.py` | LLM model configuration | Pydantic |
-| `src/bedrock/client.py` | AWS Bedrock API client | Boto3 |
-| `src/bedrock/langchain_integration.py` | ChatBedrock wrapper | **Langchain** |
-| `src/agent/aws_agent.py` | StateGraph orchestrator | **Langgraph** |
-| `src/agentcore_entrypoint.py` | Production entrypoint | AgentCore |
+| Component | Depends On | Required For |
+|-----------|------------|--------------|
+| **Runtime** | None | All other components |
+| **Gateway** | Runtime | Gateway tools, Policy |
+| **Identity** | Gateway (Cognito) | Gateway authentication |
+| **Memory** | Runtime | Session persistence |
+| **Policy** | Gateway | Access control |
 
 ---
 
@@ -179,11 +274,22 @@ The system uses **Langchain + Langgraph + AWS Bedrock** at key integration point
 | `src/agent/` | Langgraph StateGraph agent orchestrator |
 | `src/bedrock/` | AWS Bedrock API client and Langchain integration |
 | `src/mcp_tools/` | **Local Tools** - MCP tool implementations (S3, Lambda, DynamoDB) |
-| `src/agentcore_gateway/` | Gateway setup scripts (IAM, Cognito, Gateway) |
-| `src/gateway_integration/` | **Gateway Tools** - Client and LangChain wrappers for external APIs |
+| `src/agentcore_gateway/` | **Gateway** setup scripts (IAM, Cognito, Gateway) |
+| `src/gateway_integration/` | **Identity** - MCP client with OAuth2 token exchange |
+| `src/memory/` | **Memory** - Session and event management |
+| `src/policy/` | **Policy** - Cedar policy management |
 | `src/config/` | Application configuration |
 | `src/utils/` | Utility functions |
 | `docs/` | Documentation files |
+
+### Key Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `.bedrock_agentcore.yaml` | Agent deployment configuration |
+| `gateway_config.json` | Gateway, Cognito, and target configuration |
+| `memory_config.json` | Memory resource configuration |
+| `policy_config.json` | Policy engine configuration |
 
 ---
 
@@ -191,19 +297,23 @@ The system uses **Langchain + Langgraph + AWS Bedrock** at key integration point
 
 | Document | Description |
 |----------|-------------|
-| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Full deployment guide, quick start, Gateway/Identity setup, Security, FAQ |
-| [TESTING_GUIDE.md](docs/TESTING_GUIDE.md) | Usage examples, local testing, and troubleshooting |
+| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Full deployment guide with all setup commands, configuration, and security |
+| [TESTING_GUIDE.md](docs/TESTING_GUIDE.md) | Usage examples, local testing, troubleshooting |
+
 ---
 
 ## Support
 
-- **AWS Bedrock Docs**: https://docs.aws.amazon.com/bedrock/
+### Official Documentation
+
+- **AWS Bedrock**: https://docs.aws.amazon.com/bedrock/
 - **AWS Bedrock AgentCore**: https://docs.aws.amazon.com/bedrock/latest/userguide/agents-core.html
-- **AgentCore Samples**: https://github.com/awslabs/amazon-bedrock-agentcore-samples
-- **Langchain Docs**: https://python.langchain.com/
-- **Langgraph Docs**: https://langchain-ai.github.io/langgraph/
+
+### Frameworks
+
+- **Langchain**: https://python.langchain.com/
+- **Langgraph**: https://langchain-ai.github.io/langgraph/
 - **MCP Protocol**: https://modelcontextprotocol.io/
+- **Cedar Policy Language**: https://www.cedarpolicy.com/
 
 ---
-
-**Built with ❤️ using AWS Bedrock, AgentCore Gateway, AgentCore Identity, Langchain, and Langgraph**

@@ -1,0 +1,7 @@
+{
+  "policy_engine_id": "YOUR_POLICY_ENGINE_ID",
+  "policy_engine_arn": "arn:aws:bedrock-agentcore:YOUR_AWS_REGION:YOUR_AWS_ACCOUNT_ID:policy-engine/YOUR_POLICY_ENGINE_ID",
+  "region": "YOUR_AWS_REGION",
+  "gateway_id": "YOUR_GATEWAY_ID",
+  "mode": "ENFORCE"
+}

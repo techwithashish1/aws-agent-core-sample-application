@@ -16,15 +16,28 @@ import json
 import boto3
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+# Load environment variables from .env file (check src/.env first, then local)
+src_env = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+local_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+load_dotenv(src_env)
+load_dotenv(local_env, override=True)  # Local overrides if exists
 
-# Add parent directory to path for utils import
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import utils
+# Add src directory to path for config import (must be first)
+src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
-# Configuration
-REGION = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+from config import settings
+
+# Import utils from current directory explicitly to avoid conflicts
+import importlib.util
+utils_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'utils.py')
+spec = importlib.util.spec_from_file_location("gateway_utils", utils_path)
+utils = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(utils)
+
+# Configuration - use settings.aws_region as default
+REGION = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', settings.aws_region))
 GATEWAY_NAME = "resource-metrics-ac-gateway"
 USER_POOL_NAME = "resource-metrics-gateway-pool"
 RESOURCE_SERVER_ID = "resource-metrics-gateway-id"
@@ -47,7 +60,7 @@ def setup_iam_role(config):
     print(f"Gateway Name: {GATEWAY_NAME}")
     
     print("Creating IAM Role for AgentCore Gateway...")
-    agentcore_gateway_iam_role = utils.create_agentcore_gateway_role(GATEWAY_NAME)
+    agentcore_gateway_iam_role = utils.create_agentcore_gateway_role(GATEWAY_NAME, region=REGION)
     
     role_arn = agentcore_gateway_iam_role['Role']['Arn']
     role_name = agentcore_gateway_iam_role['Role']['RoleName']

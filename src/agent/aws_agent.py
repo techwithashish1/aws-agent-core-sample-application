@@ -4,8 +4,8 @@ import os
 from typing import Dict, Any, List, Optional, TypedDict, Annotated, Sequence
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, FunctionMessage, ToolMessage
-from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.tools import BaseTool, StructuredTool, tool
 import operator
 import structlog
 
@@ -28,6 +28,7 @@ from mcp_tools import (
     UpdateDynamoDBTableTool,
 )
 from config import settings
+from memory import create_memory_session, MemorySession
 
 logger = structlog.get_logger()
 
@@ -232,11 +233,20 @@ def load_gateway_tools() -> List[BaseTool]:
 class AWSResourceAgent:
     """AWS Resource Management Agent using Langgraph."""
 
-    def __init__(self, include_gateway_tools: bool = True):
+    def __init__(
+        self,
+        include_gateway_tools: bool = True,
+        memory_id: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        session_id: Optional[str] = None
+    ):
         """Initialize the agent.
         
         Args:
             include_gateway_tools: Whether to include tools from AgentCore Gateway
+            memory_id: AgentCore Memory ID for short-term memory. Falls back to settings.memory_id.
+            actor_id: Unique identifier for the user. Auto-generated if not provided.
+            session_id: Unique identifier for the session. Auto-generated if not provided.
         """
         self.logger = logger.bind(component="aws_resource_agent")
         self.tools = create_langchain_tools()
@@ -247,6 +257,23 @@ class AWSResourceAgent:
             if gateway_tools:
                 self.tools.extend(gateway_tools)
                 self.logger.info("gateway_tools_added", count=len(gateway_tools))
+        
+        # Initialize memory session for short-term memory
+        self.memory_session: Optional[MemorySession] = None
+        if settings.memory_enabled:
+            self.memory_session = create_memory_session(
+                memory_id=memory_id,
+                actor_id=actor_id,
+                session_id=session_id
+            )
+            if self.memory_session:
+                # Add list_conversation_history tool
+                self.tools.append(self._create_memory_tool())
+                self.logger.info(
+                    "memory_enabled",
+                    memory_id=self.memory_session.memory_id,
+                    session_id=self.memory_session.session_id
+                )
         
         self.llm = create_bedrock_llm()
         
@@ -259,8 +286,36 @@ class AWSResourceAgent:
         self.logger.info(
             "agent_initialized",
             num_tools=len(self.tools),
-            model=settings.bedrock_model_id
+            model=settings.bedrock_model_id,
+            memory_enabled=self.memory_session is not None
         )
+
+    def _create_memory_tool(self) -> BaseTool:
+        """Create a tool for retrieving conversation history.
+        
+        Returns:
+            LangChain tool for listing past events
+        """
+        memory_session = self.memory_session
+        
+        @tool
+        def list_conversation_history(max_events: int = 5) -> str:
+            """Retrieve recent conversation history from memory.
+            
+            Use this tool when you need to recall what was discussed earlier
+            in the conversation, or to understand context from previous interactions.
+            
+            Args:
+                max_events: Maximum number of past events to retrieve (default: 5)
+                
+            Returns:
+                Formatted conversation history
+            """
+            if not memory_session:
+                return "Memory is not available."
+            return memory_session.get_conversation_history(max_events=max_events)
+        
+        return list_conversation_history
 
     def _create_graph(self) -> StateGraph:
         """Create the Langgraph state graph.
@@ -304,6 +359,29 @@ class AWSResourceAgent:
         messages = state["messages"]
         
         self.logger.info("agent_reasoning", message_count=len(messages))
+        
+        # Build system message with memory awareness
+        system_content = """You are an AI assistant specialized in managing AWS resources.
+You can help users create, configure, manage, and monitor AWS resources including S3 buckets,
+Lambda functions, and DynamoDB tables.
+
+MEMORY CAPABILITIES:
+- You have access to conversation history using the list_conversation_history tool
+- ALWAYS use this tool first when a user asks about previous conversations, their name, 
+  projects they mentioned, or any contextual information from earlier interactions
+- If a user asks "what is my name" or "what did we discuss", USE the list_conversation_history tool
+
+Key capabilities:
+- Create and configure S3 buckets
+- Create, update, and manage Lambda functions  
+- Create, configure, and manage DynamoDB tables
+
+When listing resources, ALWAYS show the actual data returned by tools.
+Always prioritize security best practices."""
+
+        # Prepend system message if not already present
+        if not messages or not isinstance(messages[0], SystemMessage):
+            messages = [SystemMessage(content=system_content)] + list(messages)
         
         # Invoke LLM with tools to get decision
         response = await self.llm_with_tools.ainvoke(messages)
@@ -430,11 +508,71 @@ class AWSResourceAgent:
             
             self.logger.info("command_executed", response_length=len(response))
             
+            # Store conversation event in memory (short-term memory)
+            if self.memory_session and response.strip():
+                try:
+                    self.memory_session.create_event(
+                        user_message=user_input,
+                        assistant_message=response
+                    )
+                    self.logger.info("conversation_stored_in_memory")
+                except Exception as mem_error:
+                    self.logger.warning(
+                        "memory_store_failed",
+                        error=str(mem_error)
+                    )
+            
             return response
             
         except Exception as e:
             self.logger.error("execution_failed", error=str(e), error_type=type(e).__name__)
             return f"Error executing command: {str(e)}"
+
+    def new_session(self) -> Optional[str]:
+        """Start a new memory session while keeping the same actor.
+        
+        Returns:
+            New session ID or None if memory is not enabled.
+        """
+        if self.memory_session:
+            return self.memory_session.new_session()
+        return None
+
+    def set_session(self, session_id: str, actor_id: Optional[str] = None) -> None:
+        """Set the memory session identifiers for the current invocation.
+        
+        This allows maintaining conversation context across multiple invocations
+        by using consistent session_id and actor_id.
+        
+        Args:
+            session_id: The session identifier (e.g., from AgentCore context).
+            actor_id: Optional actor identifier. If not provided, keeps existing.
+        """
+        if self.memory_session:
+            self.memory_session.session_id = session_id
+            if actor_id:
+                self.memory_session.actor_id = actor_id
+            self.logger.info(
+                "session_updated",
+                session_id=session_id,
+                actor_id=self.memory_session.actor_id
+            )
+
+    def get_session_info(self) -> Dict[str, Any]:
+        """Get current memory session information.
+        
+        Returns:
+            Dictionary with session details.
+        """
+        if self.memory_session:
+            return {
+                "memory_enabled": True,
+                "memory_id": self.memory_session.memory_id,
+                "actor_id": self.memory_session.actor_id,
+                "session_id": self.memory_session.session_id,
+                "region": self.memory_session.region
+            }
+        return {"memory_enabled": False}
 
     def execute_sync(self, user_input: str) -> str:
         """Synchronous wrapper for execute.

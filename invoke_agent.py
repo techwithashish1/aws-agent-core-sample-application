@@ -10,10 +10,12 @@ import boto3
 import json
 import sys
 import uuid
+import os
 
-# Configuration - Update these values with your agent details
-AGENT_ARN = "arn:aws:bedrock-agentcore:ap-south-1:975050172700:runtime/AWS_Resource_Manger_Ops_Agent-UxV6IU2anN"
-AWS_REGION = "ap-south-1"
+# Configuration - Update these values with your agent details or set environment variables
+# Example: export AGENT_ARN="arn:aws:bedrock-agentcore:region:account:runtime/agent-id"
+AGENT_ARN = os.environ.get("AGENT_ARN", "arn:aws:bedrock-agentcore:ap-south-1:YOUR_ACCOUNT_ID:runtime/YOUR_AGENT_ID")
+AWS_REGION = os.environ.get("AWS_REGION", "ap-south-1")
 
 
 def invoke_agent(prompt: str, agent_arn: str = AGENT_ARN, region: str = AWS_REGION):
