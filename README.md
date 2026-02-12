@@ -72,7 +72,9 @@ This application is a **complete reference implementation** of all AWS Bedrock A
 ### High Level Architecture
 
 
-![Architecture Diagram](docs/agentcore_architecture.png)
+<p align="center">
+  <img src="docs/agentcore_architecture.png" alt="Architecture Diagram" style="max-width: 100%;">
+</p>
 
 
 ---
