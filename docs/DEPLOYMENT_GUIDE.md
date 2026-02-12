@@ -15,11 +15,12 @@ This guide covers deploying the AWS Resource Manager agent to AWS Bedrock AgentC
 3. [Detailed Deployment Steps](#detailed-deployment-steps)
 4. [AgentCore Gateway Setup](#agentcore-gateway-setup)
 5. [AgentCore Memory Setup](#agentcore-memory-setup)
-6. [AgentCore Identity](#agentcore-identity)
-6. [Common Commands](#common-commands)
-7. [Configuration](#configuration)
-8. [Monitoring & Operations](#monitoring--operations)
-9. [Security](#security)
+6. [AgentCore Policy Setup](#agentcore-policy-setup)
+7. [AgentCore Identity](#agentcore-identity)
+8. [Common Commands](#common-commands)
+9. [Configuration](#configuration)
+10. [Monitoring & Operations](#monitoring--operations)
+11. [Security](#security)
 
 ---
 
@@ -95,7 +96,23 @@ python -m memory.setup_memory --type long-term --region ap-south-1
 See [AgentCore Memory Setup](#agentcore-memory-setup) for details.
 
 
-### Step 5: Deploy Agent
+### Step 5: Setup AgentCore Policy (Optional)
+
+```bash
+# Create policy engine and attach to gateway
+python -m policy.setup_policy --create-engine \
+  --gateway-id <gateway-id> \
+  --mode ENFORCE \
+  --region ap-south-1
+
+# Add policy guardrails
+python -m policy.setup_policy --add-preset all --engine-id <engine-id>
+```
+
+See [AgentCore Policy Setup](#agentcore-policy-setup) for details.
+
+
+### Step 6: Deploy Agent
 
 ```bash
 cd ../  # Back to src directory
@@ -350,6 +367,222 @@ Memory names must match the pattern: `[a-zA-Z][a-zA-Z0-9_]{0,47}`
 
 For more information on AgentCore Memory:
 - [AgentCore Memory Samples](https://github.com/awslabs/amazon-bedrock-agentcore-samples/tree/main/01-tutorials/04-AgentCore-memory)
+
+---
+
+## AgentCore Policy Setup
+
+AgentCore Policy provides **guardrails and access control** for agent tool invocations using **Cedar policies**. Policies can enforce security constraints, role-based access control, and parameter limits on all agent actions.
+
+### Why Use AgentCore Policy?
+
+| Challenge | Policy Solution |
+|-----------|-----------------|
+| **Unauthorized Actions** | Cedar policies control which tools can be invoked |
+| **Production Safety** | Block destructive operations on production resources |
+| **Regional Compliance** | Restrict operations to specific AWS regions |
+| **Resource Limits** | Enforce parameter limits (e.g., Lambda memory caps) |
+| **Audit Trail** | LOG_ONLY mode for testing and compliance |
+
+### Policy Modes
+
+| Mode | Behavior |
+|------|----------|
+| **ENFORCE** | Blocks tool invocations that violate policies |
+| **LOG_ONLY** | Logs violations but allows execution (for testing) |
+
+### Pre-Built Policy Templates
+
+The policy module includes ready-to-use Cedar policy templates:
+
+| Template | Purpose |
+|----------|---------|
+| `region-restriction` | Limit tools to specific AWS regions |
+| `destructive-ops` | Block delete operations on protected resources |
+| `role-based` | Require specific principal tags for actions |
+| `parameter-limits` | Enforce numeric parameter constraints |
+| `all` | Apply all above policies |
+
+### Setup Steps
+
+#### Pre-requisite: Fix Gateway Role Trust Policy
+
+Before attaching a policy engine to your gateway, update the gateway role's trust policy to allow `bedrock-agentcore` service from all regions:
+
+```bash
+cd src
+
+# Fix the gateway role trust policy
+python -m policy.setup_policy --fix-gateway-role \
+  --role-name <your-gateway-role-name>
+
+# Example:
+python -m policy.setup_policy --fix-gateway-role \
+  --role-name agentcore-resource-metrics-ac-gateway-role
+```
+
+> **Why is this needed?** The default gateway role trust policy may restrict `bedrock-agentcore` to a specific region. Policy engine attachment requires the trust policy to allow access from any region where your policy engine is created.
+
+> **Important:** When a Policy Engine is attached in ENFORCE mode, **ALL tool access is DENIED by default**. You must create policies to PERMIT specific actions immediately after attaching the engine.
+
+#### Step 1: Create Policy Engine
+
+Create a policy engine and attach it to your gateway:
+
+```bash
+cd src
+
+# Create policy engine in ENFORCE mode
+python -m policy.setup_policy --create-engine \
+  --gateway-id <your-gateway-id> \
+  --mode ENFORCE \
+  --region ap-south-1
+
+# Or use LOG_ONLY mode for testing
+python -m policy.setup_policy --create-engine \
+  --gateway-id <your-gateway-id> \
+  --mode LOG_ONLY \
+  --region ap-south-1
+```
+
+**Creates:**
+- Policy engine attached to your gateway
+- Configuration saved to `policy_config.json`
+
+#### Step 2: Permit Gateway Tools
+
+**Important:** After creating a policy engine in ENFORCE mode, all tools are blocked. Create a permit-all policy to allow access:
+
+```bash
+# Permit all gateway tools (queries gateway for actual tool names)
+python -m policy.setup_policy --permit-all --engine-id <engine-id>
+```
+
+This queries the gateway for available tools and creates a Cedar policy that explicitly permits each one.
+
+#### Step 3: Add Additional Restrictions (Optional)
+
+Add restriction policies on top of the permit-all policy:
+
+```bash
+# Add preset restriction policies
+python -m policy.setup_policy --add-preset all --engine-id <engine-id>
+
+# Or add specific presets
+python -m policy.setup_policy --add-preset region-restriction --engine-id <engine-id>
+python -m policy.setup_policy --add-preset destructive-ops --engine-id <engine-id>
+```
+
+#### Step 3: Generate Custom Policies (Optional)
+
+Generate Cedar policies from natural language descriptions:
+
+```bash
+python -m policy.setup_policy --generate-policy \
+  --engine-id <engine-id> \
+  --nl-description "Block all delete operations on resources with 'prod' in the name"
+```
+
+### Policy Management Commands
+
+```bash
+# List all policy engines
+python -m policy.setup_policy --list-engines --region ap-south-1
+
+# List policies on a specific engine
+python -m policy.setup_policy --list-policies --engine-id <engine-id>
+
+# Clean up (delete engine and all policies)
+python -m policy.setup_policy --cleanup --engine-id <engine-id>
+```
+
+### Cedar Policy Syntax
+
+> **Important:** AgentCore rejects overly permissive policies. You must explicitly list the actions/tools you want to permit.
+
+#### Action Naming Convention
+
+Tool actions follow the format: `<target-name>___<tool-name>` (three underscores)
+
+Example: `resource-metrics-iam-target___Get_All_Lambda_Metrics`
+
+#### Permit Specific Tools
+
+```cedar
+// Permit specific gateway tools
+permit(principal, action in [
+    AgentCore::Action::"resource-metrics-iam-target___Get_All_Lambda_Metrics",
+    AgentCore::Action::"resource-metrics-iam-target___Get_All_S3_Metrics"
+], resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:ap-south-1:123456789012:gateway/my-gateway-id");
+```
+
+#### Region Restriction Policy
+
+```cedar
+// Limit a tool to specific AWS regions
+permit(principal, 
+    action == AgentCore::Action::"my-target___create_resource", 
+    resource == AgentCore::Gateway::"arn:aws:...")
+when {
+    context.input.region in ["ap-south-1", "us-east-1"]
+};
+```
+
+#### Block Destructive Operations
+
+```cedar
+// Block delete operations on production resources
+forbid(principal, 
+    action == AgentCore::Action::"my-target___delete_bucket", 
+    resource == AgentCore::Gateway::"arn:aws:...")
+when {
+    context.input.bucket_name like "*prod*"
+};
+```
+
+#### Parameter Limit Policy
+
+```cedar
+// Limit numeric parameter values
+permit(principal, 
+    action == AgentCore::Action::"my-target___create_lambda", 
+    resource == AgentCore::Gateway::"arn:aws:...")
+when {
+    context.input.memory_size <= 1024
+};
+```
+
+### IAM Permissions
+
+The agent's runtime role needs the following permissions for policy operations:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:CreatePolicyEngine",
+        "bedrock-agentcore:GetPolicyEngine",
+        "bedrock-agentcore:DeletePolicyEngine",
+        "bedrock-agentcore:ListPolicyEngines",
+        "bedrock-agentcore:CreatePolicy",
+        "bedrock-agentcore:GetPolicy",
+        "bedrock-agentcore:DeletePolicy",
+        "bedrock-agentcore:ListPolicies"
+      ],
+      "Resource": "arn:aws:bedrock-agentcore:*:*:policy-engine/*"
+    }
+  ]
+}
+```
+
+### Reference
+
+For more information on AgentCore Policy:
+- [AgentCore Policy Samples](https://github.com/awslabs/amazon-bedrock-agentcore-samples/tree/main/01-tutorials/05-AgentCore-policy)
+- [Cedar Policy Language](https://www.cedarpolicy.com/)
 
 ---
 

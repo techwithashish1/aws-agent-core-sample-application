@@ -13,7 +13,7 @@
                     "aws:SourceAccount": "{AccountId}"
                 },
                 "ArnLike": {
-                    "aws:SourceArn": "arn:aws:bedrock-agentcore:us-east-1:{AccountId}:*"
+                    "aws:SourceArn": "arn:aws:bedrock-agentcore:*:{AccountId}:*"
                 }
             }
         }

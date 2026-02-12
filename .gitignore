@@ -91,3 +91,11 @@ test_output/
 # Gateway configuration (contains credentials)
 gateway_config.json
 **/gateway_config.json
+!gateway_config.json.example
+!**/gateway_config.json.example
+
+# Policy configuration
+policy_config.json
+**/policy_config.json
+!policy_config.json.example
+!**/policy_config.json.example

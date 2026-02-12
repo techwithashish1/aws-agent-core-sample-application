@@ -1,0 +1,48 @@
+{
+  "region": "YOUR_AWS_REGION",
+  "gateway_name": "YOUR_GATEWAY_NAME",
+  "iam_role": {
+    "arn": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_ROLE_NAME",
+    "name": "YOUR_ROLE_NAME"
+  },
+  "cognito": {
+    "user_pool_id": "YOUR_REGION_POOLID",
+    "user_pool_name": "YOUR_USER_POOL_NAME",
+    "resource_server_id": "YOUR_RESOURCE_SERVER_ID",
+    "client_id": "YOUR_COGNITO_CLIENT_ID",
+    "client_secret": "YOUR_COGNITO_CLIENT_SECRET",
+    "scope_names": [
+      "YOUR_RESOURCE_SERVER_ID/invoke"
+    ],
+    "scope_string": "YOUR_RESOURCE_SERVER_ID/invoke",
+    "discovery_url": "https://cognito-idp.YOUR_AWS_REGION.amazonaws.com/YOUR_USER_POOL_ID/.well-known/openid-configuration"
+  },
+  "gateway": {
+    "id": "YOUR_GATEWAY_ID",
+    "url": "https://YOUR_GATEWAY_ID.gateway.bedrock-agentcore.YOUR_AWS_REGION.amazonaws.com/mcp",
+    "name": "YOUR_GATEWAY_NAME"
+  },
+  "credential_provider": {
+    "name": "YOUR_CREDENTIAL_PROVIDER_NAME",
+    "arn": "arn:aws:bedrock-agentcore:YOUR_AWS_REGION:YOUR_AWS_ACCOUNT_ID:token-vault/default/apikeycredentialprovider/YOUR_CREDENTIAL_PROVIDER_NAME",
+    "secret_arn": "arn:aws:secretsmanager:YOUR_AWS_REGION:YOUR_AWS_ACCOUNT_ID:secret:YOUR_SECRET_NAME"
+  },
+  "targets": {
+    "iam_target": {
+      "id": "YOUR_IAM_TARGET_ID",
+      "name": "YOUR_IAM_TARGET_NAME",
+      "api_id": "YOUR_API_GATEWAY_ID",
+      "status": "READY"
+    },
+    "apikey_target": {
+      "id": "YOUR_APIKEY_TARGET_ID",
+      "name": "YOUR_APIKEY_TARGET_NAME",
+      "api_id": "YOUR_API_GATEWAY_ID",
+      "status": "READY"
+    }
+  },
+  "api_gateway": {
+    "id": "YOUR_API_GATEWAY_ID",
+    "stage": "dev"
+  }
+}
