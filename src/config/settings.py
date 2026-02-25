@@ -1,6 +1,8 @@
 """Configuration settings for AWS Resource Manager."""
 
+import os
 from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,6 +48,15 @@ class Settings(BaseSettings):
     memory_id: Optional[str] = None  # Set after memory creation
     memory_event_expiry_days: int = 7
     memory_region: Optional[str] = None  # Defaults to aws_region
+
+    @field_validator('memory_id', mode='before')
+    @classmethod
+    def get_memory_id(cls, v):
+        """Support both MEMORY_ID and BEDROCK_AGENTCORE_MEMORY_ID env vars."""
+        if v:
+            return v
+        # Fallback to AgentCore-style env var
+        return os.environ.get('BEDROCK_AGENTCORE_MEMORY_ID')
 
     model_config = SettingsConfigDict(
         env_file=".env",
