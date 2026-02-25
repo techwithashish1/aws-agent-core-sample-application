@@ -7,22 +7,32 @@
 ---
 
 ## Table of Contents
-
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [AWS AgentCore Components](#aws-agentcore-components)
+1. [AgentCore] (#agentcore)
+2. [Overview](#overview)
+3. [Architecture](#architecture)
+4. [AWS AgentCore Components](#aws-agentcore-components)
    - [AgentCore Runtime](#agentcore-runtime)
    - [AgentCore Gateway](#agentcore-gateway)
    - [AgentCore Identity](#agentcore-identity)
    - [AgentCore Memory](#agentcore-memory)
    - [AgentCore Policy](#agentcore-policy)
-4. [Project Structure](#project-structure)
-5. [Documentation](#documentation)
-6. [Support](#support)
+5. [Project Structure](#project-structure)
+6. [Documentation](#documentation)
+7. [Support](#support)
 
 ---
 
+
+## AgentCore? 
+
+Amazon Bedrock AgentCore is a modular set of capabilities to build, deploy and operate production-grade agents securely and scalably using any framework and model. 
+
+AgentCore capabilities are optimized to work together or individually, giving you the flexibility to integrate with any open-source frameworks.
+
+![alt text](image.png)
+
 ## Overview
+
 
 ### What is This?
 

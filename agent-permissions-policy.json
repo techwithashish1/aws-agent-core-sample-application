@@ -63,6 +63,30 @@
         "cloudwatch:GetMetricData"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "BedrockInvoke",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockAgentCoreMemory",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:CreateMemory",
+        "bedrock-agentcore:GetMemory",
+        "bedrock-agentcore:ListMemories",
+        "bedrock-agentcore:DeleteMemory",
+        "bedrock-agentcore:CreateEvent",
+        "bedrock-agentcore:ListEvents",
+        "bedrock-agentcore:GetEvent",
+        "bedrock-agentcore:DeleteEvent"
+      ],
+      "Resource": "*"
     }
   ]
 }
