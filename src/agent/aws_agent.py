@@ -285,8 +285,9 @@ class AWSResourceAgent:
                 session_id=session_id
             )
             if self.memory_session:
-                # Add list_conversation_history tool
+                # Add memory tools (session history + semantic recall)
                 self.tools.append(self._create_memory_tool())
+                self.tools.append(self._create_memory_recall_tool())
                 self.logger.info(
                     "memory_enabled",
                     memory_id=self.memory_session.memory_id,
@@ -309,7 +310,7 @@ class AWSResourceAgent:
         )
 
     def _create_memory_tool(self) -> BaseTool:
-        """Create a tool for retrieving conversation history.
+        """Create a tool for retrieving conversation history from current session.
         
         Returns:
             LangChain tool for listing past events
@@ -317,29 +318,52 @@ class AWSResourceAgent:
         memory_session = self.memory_session
         
         @tool
-        def list_conversation_history(max_events: int = 5, include_all_sessions: bool = True) -> str:
-            """Retrieve conversation history from memory.
+        def list_conversation_history(max_events: int = 5) -> str:
+            """Retrieve recent conversation history from the current session.
             
-            Use this tool when you need to recall what was discussed earlier,
-            understand context from previous interactions, or remember user preferences.
+            Use this tool to recall what was discussed earlier in THIS conversation session.
             
             Args:
                 max_events: Maximum number of past events to retrieve (default: 5)
-                include_all_sessions: If True (default), retrieves history from all sessions
-                    for this user - useful for remembering preferences across conversations.
-                    If False, only retrieves from current session.
                 
             Returns:
-                Formatted conversation history
+                Formatted conversation history from current session
             """
             if not memory_session:
                 return "Memory is not available."
-            return memory_session.get_conversation_history(
-                max_events=max_events, 
-                cross_session=include_all_sessions
-            )
+            return memory_session.get_conversation_history(max_events=max_events)
         
         return list_conversation_history
+
+    def _create_memory_recall_tool(self) -> BaseTool:
+        """Create a tool for semantic search across all sessions.
+        
+        Returns:
+            LangChain tool for searching memories
+        """
+        memory_session = self.memory_session
+        
+        @tool
+        def recall_from_memory(query: str, max_results: int = 5) -> str:
+            """Search memory for relevant information across ALL sessions.
+            
+            Use this tool when you need to remember something the user mentioned
+            in a PREVIOUS conversation, like their name, preferences, or past requests.
+            This searches semantically across all past sessions.
+            
+            Args:
+                query: What to search for (e.g., "user's name", "user's favorite color", 
+                       "what AWS services did user mention")
+                max_results: Maximum number of results to return (default: 5)
+                
+            Returns:
+                Relevant memories from past conversations
+            """
+            if not memory_session:
+                return "Memory is not available."
+            return memory_session.recall_from_memory(query=query, top_k=max_results)
+        
+        return recall_from_memory
 
     def _create_graph(self) -> StateGraph:
         """Create the Langgraph state graph.
@@ -596,8 +620,9 @@ Always prioritize security best practices."""
                     session_id=session_id
                 )
                 if self.memory_session:
-                    # Add memory tool and rebuild tool binding
+                    # Add memory tools and rebuild tool binding
                     self.tools.append(self._create_memory_tool())
+                    self.tools.append(self._create_memory_recall_tool())
                     self.llm_with_tools = self.llm.bind_tools(self.tools)
                     self.tool_node = ToolNode(self.tools)
                     self.graph = self._create_graph()

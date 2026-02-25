@@ -98,37 +98,25 @@ class MemorySession:
 
     def list_events(
         self,
-        max_results: int = 10,
-        cross_session: bool = False
+        max_results: int = 10
     ) -> List[Dict[str, Any]]:
-        """List recent events from memory.
+        """List recent events from the current session.
         
         Args:
             max_results: Maximum number of events to retrieve (default: 10).
-            cross_session: If True, retrieves events across all sessions for this actor.
-                          If False, only retrieves events from current session.
             
         Returns:
             List of event dictionaries.
         """
         try:
-            if cross_session:
-                # Retrieve events across all sessions for this actor
-                events = self.client.list_events(
-                    memory_id=self.memory_id,
-                    actor_id=self.actor_id,
-                    max_results=max_results
-                )
-            else:
-                # Retrieve events from current session only
-                events = self.client.list_events(
-                    memory_id=self.memory_id,
-                    actor_id=self.actor_id,
-                    session_id=self.session_id,
-                    max_results=max_results
-                )
+            events = self.client.list_events(
+                memory_id=self.memory_id,
+                actor_id=self.actor_id,
+                session_id=self.session_id,
+                max_results=max_results
+            )
             
-            logger.info(f"Retrieved {len(events) if events else 0} events (cross_session={cross_session})")
+            logger.info(f"Retrieved {len(events) if events else 0} events from session")
             return events if events else []
             
         except ClientError as e:
@@ -138,17 +126,53 @@ class MemorySession:
             logger.error(f"Unexpected error listing events: {e}")
             return []
 
-    def get_conversation_history(self, max_events: int = 5, cross_session: bool = False) -> str:
-        """Get formatted conversation history for context.
+    def retrieve_memories(
+        self,
+        query: str,
+        namespace: str = "default",
+        top_k: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Retrieve memories using semantic search across all sessions.
+        
+        This searches across all sessions for this actor using semantic similarity.
+        
+        Args:
+            query: Natural language query to search for.
+            namespace: Memory namespace to search in (default: "default").
+            top_k: Maximum number of results to return (default: 5).
+            
+        Returns:
+            List of relevant memory records.
+        """
+        try:
+            memories = self.client.retrieve_memories(
+                memory_id=self.memory_id,
+                namespace=namespace,
+                query=query,
+                actor_id=self.actor_id,
+                top_k=top_k
+            )
+            
+            logger.info(f"Retrieved {len(memories) if memories else 0} memories for query: {query[:50]}...")
+            return memories if memories else []
+            
+        except ClientError as e:
+            logger.error(f"Failed to retrieve memories: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving memories: {e}")
+            return []
+
+    def get_conversation_history(self, max_events: int = 5) -> str:
+        """Get formatted conversation history from current session.
         
         Args:
             max_events: Maximum number of past events to include.
-            cross_session: If True, includes events from all sessions.
             
         Returns:
             Formatted string of conversation history.
         """
-        events = self.list_events(max_results=max_events, cross_session=cross_session)
+        events = self.list_events(max_results=max_events)
         
         if not events:
             return "No previous conversation history."
@@ -170,6 +194,34 @@ class MemorySession:
                         history_parts.append(f"Assistant: {content}")
         
         return "\n".join(history_parts) if history_parts else "No conversation history available."
+
+    def recall_from_memory(self, query: str, top_k: int = 5) -> str:
+        """Search memory for relevant information across all sessions.
+        
+        Uses semantic search to find relevant past conversations.
+        
+        Args:
+            query: What to search for (e.g., "user's name", "favorite color").
+            top_k: Maximum number of results.
+            
+        Returns:
+            Formatted string of relevant memories.
+        """
+        memories = self.retrieve_memories(query=query, top_k=top_k)
+        
+        if not memories:
+            return "No relevant memories found."
+        
+        parts = []
+        for i, mem in enumerate(memories, 1):
+            # Memory structure varies - try to extract text content
+            text = mem.get("text", mem.get("content", ""))
+            if isinstance(text, dict):
+                text = text.get("text", str(text))
+            if text:
+                parts.append(f"{i}. {text}")
+        
+        return "\n".join(parts) if parts else "No relevant memories found."
 
     def new_session(self) -> str:
         """Start a new session while keeping the same actor.
