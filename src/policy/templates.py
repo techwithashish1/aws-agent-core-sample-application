@@ -6,9 +6,13 @@ access control scenarios in AWS resource management.
 Cedar Policy Syntax Reference:
 - permit/forbid: Allow or deny the action
 - principal: Who can access (supports tags from JWT claims)
-- action: What action they can perform (tool name)
+- action: What action they can perform (target___tool format)
 - resource: What resource they can access (gateway ARN)
 - when { conditions }: Under what conditions
+
+Action Naming Convention:
+- Gateway tool actions follow the format: <target-name>___<tool-name> (triple underscore)
+- Example: resource-metrics-iam-target___Get_All_S3_Metrics
 
 Principal-based conditions:
 - principal.hasTag("claim_name"): Check if claim exists
@@ -25,19 +29,39 @@ Input-based conditions:
 from typing import List, Optional
 
 
+def build_action_name(target_name: str, tool_name: str = None) -> str:
+    """Build the Cedar action name using triple underscore convention.
+    
+    Args:
+        target_name: Name of the gateway target (e.g., "resource-metrics-iam-target")
+        tool_name: Name of the specific tool (e.g., "Get_All_S3_Metrics")
+        
+    Returns:
+        Formatted action name like "resource-metrics-iam-target___Get_All_S3_Metrics"
+        or just target_name if tool_name is None
+    """
+    if tool_name:
+        return f"{target_name}___{tool_name}"
+    return target_name
+
+
 def get_region_restriction_policy(
     gateway_arn: str,
-    action_name: str,
+    target_name: str,
     allowed_regions: List[str],
-    policy_name: Optional[str] = None
+    tool_name: Optional[str] = None,
+    policy_name: Optional[str] = None,
+    action_name: Optional[str] = None,  # Deprecated, use target_name
 ) -> dict:
     """Create a policy that restricts tool usage to specific AWS regions.
     
     Args:
         gateway_arn: ARN of the gateway.
-        action_name: Name of the action/tool (e.g., "create_s3_bucket").
+        target_name: Name of the gateway target (e.g., "resource-metrics-iam-target").
         allowed_regions: List of allowed AWS regions (e.g., ["ap-south-1", "us-east-1"]).
+        tool_name: Optional tool name to restrict (for tool-specific policies).
         policy_name: Optional custom policy name.
+        action_name: Deprecated - use target_name instead.
         
     Returns:
         Dict with 'name', 'description', and 'statement' for the policy.
@@ -45,41 +69,54 @@ def get_region_restriction_policy(
     Example:
         >>> policy = get_region_restriction_policy(
         ...     gateway_arn="arn:aws:...",
-        ...     action_name="create_s3_bucket",
+        ...     target_name="my-iam-target",
+        ...     tool_name="create_s3_bucket",
         ...     allowed_regions=["ap-south-1", "eu-west-1"]
         ... )
     """
+    # Support legacy action_name parameter
+    target = target_name or action_name
     regions_str = ", ".join(f'"{r}"' for r in allowed_regions)
+    
+    # Build action name using triple underscore convention
+    action = build_action_name(target, tool_name)
     
     statement = (
         f'permit(principal, '
-        f'action == AgentCore::Action::"{action_name}", '
+        f'action == AgentCore::Action::"{action}", '
         f'resource == AgentCore::Gateway::"{gateway_arn}") '
         f'when {{ context.input.region in [{regions_str}] }};'
     )
     
+    name_suffix = tool_name or target
+    # Sanitize name to match regex ^[A-Za-z][A-Za-z0-9_]*$
+    safe_name_suffix = name_suffix.replace("-", "_")
     return {
-        "name": policy_name or f"region_restriction_{action_name}",
-        "description": f"Allow {action_name} only in regions: {', '.join(allowed_regions)}",
+        "name": policy_name or f"region_restriction_{safe_name_suffix}",
+        "description": f"Allow {name_suffix} only in regions: {', '.join(allowed_regions)}",
         "statement": statement
     }
 
 
 def get_destructive_operation_policy(
     gateway_arn: str,
-    action_name: str,
+    target_name: str,
     blocked_patterns: List[str],
     field_name: str = "name",
-    policy_name: Optional[str] = None
+    tool_name: Optional[str] = None,
+    policy_name: Optional[str] = None,
+    action_name: Optional[str] = None,  # Deprecated, use target_name
 ) -> dict:
     """Create a policy that blocks destructive operations on resources matching patterns.
     
     Args:
         gateway_arn: ARN of the gateway.
-        action_name: Name of the delete action (e.g., "delete_s3_bucket").
+        target_name: Name of the gateway target (e.g., "my-iam-target").
         blocked_patterns: List of patterns to block (e.g., ["*prod*", "*important*"]).
         field_name: Input field containing the resource name (default: "name").
+        tool_name: Optional tool name to match specific operations.
         policy_name: Optional custom policy name.
+        action_name: Deprecated - use target_name instead.
         
     Returns:
         Dict with 'name', 'description', and 'statement' for forbid policy.
@@ -87,44 +124,58 @@ def get_destructive_operation_policy(
     Example:
         >>> policy = get_destructive_operation_policy(
         ...     gateway_arn="arn:aws:...",
-        ...     action_name="delete_s3_bucket",
+        ...     target_name="my-iam-target",
+        ...     tool_name="delete_s3_bucket",
         ...     blocked_patterns=["*prod*", "*backup*"],
         ...     field_name="bucket_name"
         ... )
     """
+    # Support legacy action_name parameter
+    target = target_name or action_name
+    
+    # Build action name using triple underscore convention
+    action = build_action_name(target, tool_name)
+    
     # Create OR conditions for each pattern
-    conditions = " || ".join(
+    pattern_conditions = " || ".join(
         f'context.input.{field_name} like "{pattern}"'
         for pattern in blocked_patterns
     )
     
     statement = (
         f'forbid(principal, '
-        f'action == AgentCore::Action::"{action_name}", '
+        f'action == AgentCore::Action::"{action}", '
         f'resource == AgentCore::Gateway::"{gateway_arn}") '
-        f'when {{ {conditions} }};'
+        f'when {{ {pattern_conditions} }};'
     )
     
+    name_suffix = tool_name or target
+    # Sanitize name to match regex ^[A-Za-z][A-Za-z0-9_]*$
+    safe_name_suffix = name_suffix.replace("-", "_")
     return {
-        "name": policy_name or f"block_destructive_{action_name}",
-        "description": f"Block {action_name} for resources matching: {', '.join(blocked_patterns)}",
+        "name": policy_name or f"block_destructive_{safe_name_suffix}",
+        "description": f"Block {name_suffix} for resources matching: {', '.join(blocked_patterns)}",
         "statement": statement
     }
 
 
 def get_role_based_policy(
     gateway_arn: str,
-    action_names: List[str],
+    target_names: List[str],
     required_role: str,
-    policy_name: Optional[str] = None
+    tool_names: Optional[List[str]] = None,
+    policy_name: Optional[str] = None,
+    action_names: Optional[List[str]] = None,  # Deprecated, use target_names
 ) -> dict:
     """Create a policy that requires a specific role for certain actions.
     
     Args:
         gateway_arn: ARN of the gateway.
-        action_names: List of action names that require the role.
+        target_names: List of target names that require the role.
         required_role: Role name required in principal's JWT claims.
+        tool_names: Optional list of tool names to combine with targets.
         policy_name: Optional custom policy name.
+        action_names: Deprecated - use target_names instead.
         
     Returns:
         Dict with 'name', 'description', and 'statement' for the policy.
@@ -132,16 +183,29 @@ def get_role_based_policy(
     Example:
         >>> policy = get_role_based_policy(
         ...     gateway_arn="arn:aws:...",
-        ...     action_names=["delete_s3_bucket", "delete_lambda_function"],
+        ...     target_names=["my-iam-target"],
+        ...     tool_names=["delete_s3_bucket"],
         ...     required_role="admin"
         ... )
     """
-    if len(action_names) == 1:
-        action_clause = f'action == AgentCore::Action::"{action_names[0]}"'
+    # Support legacy action_names parameter
+    targets = target_names or action_names or []
+    
+    # Build action names using triple underscore convention
+    if tool_names and len(targets) == 1:
+        # Create specific action for each tool
+        actions = [build_action_name(targets[0], tool) for tool in tool_names]
     else:
-        actions_str = ", ".join(f'AgentCore::Action::"{a}"' for a in action_names)
+        # Use targets as-is
+        actions = targets
+    
+    if len(actions) == 1:
+        action_clause = f'action == AgentCore::Action::"{actions[0]}"'
+    else:
+        actions_str = ", ".join(f'AgentCore::Action::"{a}"' for a in actions)
         action_clause = f'action in [{actions_str}]'
     
+    # Build conditions - just role check
     statement = (
         f'permit(principal, '
         f'{action_clause}, '
@@ -149,28 +213,34 @@ def get_role_based_policy(
         f'when {{ principal.hasTag("role") && principal.getTag("role") == "{required_role}" }};'
     )
     
+    # Sanitize name
+    safe_role = required_role.replace("-", "_")
     return {
-        "name": policy_name or f"role_required_{required_role}",
-        "description": f"Require '{required_role}' role for: {', '.join(action_names)}",
+        "name": policy_name or f"role_required_{safe_role}",
+        "description": f"Require '{required_role}' role for: {', '.join(tool_names or targets)}",
         "statement": statement
     }
 
 
 def get_parameter_limit_policy(
     gateway_arn: str,
-    action_name: str,
+    target_name: str,
     field_name: str,
     max_value: int,
-    policy_name: Optional[str] = None
+    tool_name: Optional[str] = None,
+    policy_name: Optional[str] = None,
+    action_name: Optional[str] = None,  # Deprecated, use target_name
 ) -> dict:
     """Create a policy that limits a numeric parameter to a maximum value.
     
     Args:
         gateway_arn: ARN of the gateway.
-        action_name: Name of the action/tool.
+        target_name: Name of the gateway target.
         field_name: Input field to limit.
         max_value: Maximum allowed value.
+        tool_name: Optional tool name to combine with target.
         policy_name: Optional custom policy name.
+        action_name: Deprecated - use target_name instead.
         
     Returns:
         Dict with 'name', 'description', and 'statement' for the policy.
@@ -178,21 +248,32 @@ def get_parameter_limit_policy(
     Example:
         >>> policy = get_parameter_limit_policy(
         ...     gateway_arn="arn:aws:...",
-        ...     action_name="create_lambda_function",
+        ...     target_name="my-iam-target",
+        ...     tool_name="create_lambda_function",
         ...     field_name="memory_size",
         ...     max_value=1024
         ... )
     """
+    # Support legacy action_name parameter
+    target = target_name or action_name
+    
+    # Build action name using triple underscore convention
+    action = build_action_name(target, tool_name)
+    
     statement = (
         f'permit(principal, '
-        f'action == AgentCore::Action::"{action_name}", '
+        f'action == AgentCore::Action::"{action}", '
         f'resource == AgentCore::Gateway::"{gateway_arn}") '
         f'when {{ context.input.{field_name} <= {max_value} }};'
     )
     
+    name_suffix = tool_name or target
+    # Sanitize name to match regex ^[A-Za-z][A-Za-z0-9_]*$
+    safe_name_suffix = name_suffix.replace("-", "_")
+    safe_field_name = field_name.replace("-", "_")
     return {
-        "name": policy_name or f"limit_{field_name}_{action_name}",
-        "description": f"Limit {field_name} to max {max_value} for {action_name}",
+        "name": policy_name or f"limit_{safe_field_name}_{safe_name_suffix}",
+        "description": f"Limit {field_name} to max {max_value} for {name_suffix}",
         "statement": statement
     }
 
@@ -299,63 +380,46 @@ def get_combined_policy(
 
 
 # Pre-built policies for AWS Resource Manager tools
+# NOTE: These require target_name to be injected from gateway_config.json at runtime
+# Action format: <target-name>___<tool-name> (triple underscore)
+#
+# IMPORTANT: Simple "allow all" policies are rejected as "overly permissive" by AgentCore.
+# All policies must have conditions.
+#
+# Actual tools in the gateway target (resource-metrics-iam-target):
+# - Get_All_S3_Metrics
+# - Get_All_DynamoDB_Metrics
+# - Get_All_Lambda_Metrics
+# - Get_S3_Bucket_Metrics
+# - Get_DynamoDB_Table_Metrics
+# - Get_Lambda_Function_Metrics
 AWS_RESOURCE_MANAGER_POLICIES = {
     "s3": {
-        "list_buckets": {
-            "description": "Allow listing S3 buckets",
-            "template": "allow_all"
-        },
-        "create_bucket_region_restricted": {
-            "description": "Allow bucket creation only in approved regions",
-            "template": "region_restriction",
+        "admin_only_s3_metrics": {
+            "description": "Only admins can view S3 bucket metrics",
+            "template": "role_based",
             "config": {
-                "action_name": "create_s3_bucket",
-                "allowed_regions": ["ap-south-1", "us-east-1", "eu-west-1"]
-            }
-        },
-        "block_prod_bucket_deletion": {
-            "description": "Block deletion of production buckets",
-            "template": "destructive_operation",
-            "config": {
-                "action_name": "delete_s3_bucket",
-                "blocked_patterns": ["*prod*", "*production*", "*important*"],
-                "field_name": "bucket_name"
+                "tool_names": ["Get_All_S3_Metrics", "Get_S3_Bucket_Metrics"],
+                "required_role": "admin"
             }
         }
     },
     "lambda": {
-        "list_functions": {
-            "description": "Allow listing Lambda functions",
-            "template": "allow_all"
-        },
-        "limit_memory": {
-            "description": "Limit Lambda memory to 1024MB",
-            "template": "parameter_limit",
-            "config": {
-                "action_name": "create_lambda_function",
-                "field_name": "memory_size",
-                "max_value": 1024
-            }
-        },
-        "admin_only_delete": {
-            "description": "Only admins can delete Lambda functions",
+        "admin_only_lambda_metrics": {
+            "description": "Only admins can view Lambda function metrics",
             "template": "role_based",
             "config": {
-                "action_names": ["delete_lambda_function"],
+                "tool_names": ["Get_All_Lambda_Metrics", "Get_Lambda_Function_Metrics"],
                 "required_role": "admin"
             }
         }
     },
     "dynamodb": {
-        "list_tables": {
-            "description": "Allow listing DynamoDB tables",
-            "template": "allow_all"
-        },
-        "admin_only_delete": {
-            "description": "Only admins can delete DynamoDB tables",
+        "admin_only_dynamodb_metrics": {
+            "description": "Only admins can view DynamoDB table metrics",
             "template": "role_based",
             "config": {
-                "action_names": ["delete_dynamodb_table"],
+                "tool_names": ["Get_All_DynamoDB_Metrics", "Get_DynamoDB_Table_Metrics"],
                 "required_role": "admin"
             }
         }

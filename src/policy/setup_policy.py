@@ -194,13 +194,15 @@ def generate_policy(args):
         print(f"Error: {e}")
         sys.exit(1)
     
+    nl_statement = args.generate_policy
+    
     print("\n" + "=" * 60)
     print("Generating Policy from Natural Language")
     print("=" * 60)
-    print(f"\nInput: {args.nl_statement}")
+    print(f"\nInput: {nl_statement}")
     
     policies = manager.generate_policy_from_nl(
-        natural_language=args.nl_statement,
+        natural_language=nl_statement,
         gateway_arn=gateway_arn
     )
     
@@ -217,7 +219,7 @@ def generate_policy(args):
             created = manager.create_policy(
                 name=f"generated_policy_{i}",
                 cedar_statement=policy['statement'],
-                description=f"Generated from: {args.nl_statement[:50]}..."
+                description=f"Generated from: {nl_statement[:50]}..."
             )
             print(f"✅ Created policy: {created['policyId']}")
 
@@ -240,6 +242,21 @@ def add_preset_policies(args):
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
+    
+    # Get target names from gateway config
+    targets = gateway_config.get('targets', {})
+    iam_target_name = targets.get('iam_target', {}).get('name')
+    apikey_target_name = targets.get('apikey_target', {}).get('name')
+    
+    # Use IAM target as default, fall back to apikey target
+    default_target_name = iam_target_name or apikey_target_name
+    
+    if not default_target_name:
+        print("Error: No targets found in gateway_config.json")
+        print("       Please ensure you have created gateway targets first.")
+        sys.exit(1)
+    
+    print(f"Using target: {default_target_name}")
         
     manager.policy_engine_id = args.engine_id
     
@@ -263,23 +280,31 @@ def add_preset_policies(args):
         policies = AWS_RESOURCE_MANAGER_POLICIES.get(service, {})
         print(f"\n📦 {service.upper()} Policies:")
         
-        for policy_name, policy_config in policies.items():
+        for policy_key, policy_config in policies.items():
             template = policy_config.get('template')
-            config = policy_config.get('config', {})
+            config = policy_config.get('config', {}).copy()
+            
+            # Use policy_key as the unique policy name (e.g., "admin_only_s3_metrics")
+            config['policy_name'] = policy_key.replace("-", "_")
+            
+            # Inject target_name into config for all templates
+            config['target_name'] = default_target_name
             
             # Generate the policy statement based on template
-            if template == 'allow_all':
-                action = config.get('action_name', f"list_{service}")
-                policy_def = get_allow_all_policy(gateway_arn, action)
-            elif template == 'region_restriction':
+            if template == 'region_restriction':
                 policy_def = get_region_restriction_policy(gateway_arn, **config)
             elif template == 'destructive_operation':
                 policy_def = get_destructive_operation_policy(gateway_arn, **config)
             elif template == 'role_based':
+                # Add target_names for role_based policy
+                config['target_names'] = [default_target_name]
+                # Remove target_name to avoid duplicate parameter
+                config.pop('target_name', None)
                 policy_def = get_role_based_policy(gateway_arn, **config)
             elif template == 'parameter_limit':
                 policy_def = get_parameter_limit_policy(gateway_arn, **config)
             else:
+                print(f"   ⚠️  Skipping unknown template: {template}")
                 continue
             
             try:
