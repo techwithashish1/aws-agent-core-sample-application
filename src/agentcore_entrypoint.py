@@ -9,9 +9,11 @@ Reference: https://github.com/awslabs/amazon-bedrock-agentcore-samples/tree/main
 """
 
 import asyncio
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, Optional
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 import structlog
+import yaml
 
 from agent import AWSResourceAgent
 from utils import setup_logging
@@ -24,6 +26,43 @@ setup_logging(
 )
 
 logger = structlog.get_logger()
+
+
+def get_memory_id() -> Optional[str]:
+    """Get memory_id from settings or .bedrock_agentcore.yaml fallback.
+    
+    Returns:
+        Memory ID string or None if not configured.
+    """
+    # First try from settings (MEMORY_ID env var)
+    if settings.memory_id:
+        return settings.memory_id
+    
+    # Fallback: read from .bedrock_agentcore.yaml
+    try:
+        config_path = Path(__file__).parent / ".bedrock_agentcore.yaml"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            
+            # Get default agent name
+            default_agent = config.get('default_agent', 'AWS_RESOURCE_MANAGER')
+            agents = config.get('agents', {})
+            
+            if default_agent in agents:
+                memory_config = agents[default_agent].get('memory', {})
+                memory_id = memory_config.get('memory_id')
+                if memory_id:
+                    logger.info("memory_id_from_yaml", memory_id=memory_id)
+                    return memory_id
+    except Exception as e:
+        logger.warning("failed_to_read_memory_config", error=str(e))
+    
+    return None
+
+
+# Cache the memory_id at module load
+_cached_memory_id = get_memory_id()
 
 # Initialize BedrockAgentCore application
 app = BedrockAgentCoreApp()
@@ -133,7 +172,12 @@ def agent_invocation(payload: Dict[str, Any], context: Any) -> Dict[str, Any]:
         aws_agent = get_agent()
         
         # Set memory session for this invocation (maintains conversation context)
-        aws_agent.set_session(session_id=session_id, actor_id=actor_id)
+        # Pass memory_id in case it wasn't available at agent initialization
+        aws_agent.set_session(
+            session_id=session_id, 
+            actor_id=actor_id,
+            memory_id=_cached_memory_id  # Fallback for lazy initialization
+        )
         
         # Execute agent (using asyncio since our agent is async)
         result = asyncio.run(aws_agent.execute(prompt))

@@ -556,17 +556,22 @@ Always prioritize security best practices."""
             return self.memory_session.new_session()
         return None
 
-    def set_session(self, session_id: str, actor_id: Optional[str] = None) -> None:
+    def set_session(self, session_id: str, actor_id: Optional[str] = None, memory_id: Optional[str] = None) -> None:
         """Set the memory session identifiers for the current invocation.
         
         This allows maintaining conversation context across multiple invocations
         by using consistent session_id and actor_id.
         
+        If memory was not initialized during agent creation (e.g., MEMORY_ID was not set),
+        this method will attempt to create a memory session if memory_id is provided.
+        
         Args:
             session_id: The session identifier (e.g., from AgentCore context).
             actor_id: Optional actor identifier. If not provided, keeps existing.
+            memory_id: Optional memory ID to create session if not already initialized.
         """
         if self.memory_session:
+            # Update existing session
             self.memory_session.session_id = session_id
             if actor_id:
                 self.memory_session.actor_id = actor_id
@@ -575,6 +580,27 @@ Always prioritize security best practices."""
                 session_id=session_id,
                 actor_id=self.memory_session.actor_id
             )
+        elif settings.memory_enabled:
+            # Try to create memory session if it wasn't initialized
+            mem_id = memory_id or settings.memory_id
+            if mem_id:
+                self.memory_session = create_memory_session(
+                    memory_id=mem_id,
+                    actor_id=actor_id,
+                    session_id=session_id
+                )
+                if self.memory_session:
+                    # Add memory tool and rebuild tool binding
+                    self.tools.append(self._create_memory_tool())
+                    self.llm_with_tools = self.llm.bind_tools(self.tools)
+                    self.tool_node = ToolNode(self.tools)
+                    self.graph = self._create_graph()
+                    self.logger.info(
+                        "memory_session_created_lazily",
+                        memory_id=self.memory_session.memory_id,
+                        session_id=session_id,
+                        actor_id=self.memory_session.actor_id
+                    )
 
     def get_session_info(self) -> Dict[str, Any]:
         """Get current memory session information.
