@@ -317,21 +317,27 @@ class AWSResourceAgent:
         memory_session = self.memory_session
         
         @tool
-        def list_conversation_history(max_events: int = 5) -> str:
-            """Retrieve recent conversation history from memory.
+        def list_conversation_history(max_events: int = 5, include_all_sessions: bool = True) -> str:
+            """Retrieve conversation history from memory.
             
-            Use this tool when you need to recall what was discussed earlier
-            in the conversation, or to understand context from previous interactions.
+            Use this tool when you need to recall what was discussed earlier,
+            understand context from previous interactions, or remember user preferences.
             
             Args:
                 max_events: Maximum number of past events to retrieve (default: 5)
+                include_all_sessions: If True (default), retrieves history from all sessions
+                    for this user - useful for remembering preferences across conversations.
+                    If False, only retrieves from current session.
                 
             Returns:
                 Formatted conversation history
             """
             if not memory_session:
                 return "Memory is not available."
-            return memory_session.get_conversation_history(max_events=max_events)
+            return memory_session.get_conversation_history(
+                max_events=max_events, 
+                cross_session=include_all_sessions
+            )
         
         return list_conversation_history
 

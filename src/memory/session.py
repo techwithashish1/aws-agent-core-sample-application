@@ -98,25 +98,37 @@ class MemorySession:
 
     def list_events(
         self,
-        max_results: int = 10
+        max_results: int = 10,
+        cross_session: bool = False
     ) -> List[Dict[str, Any]]:
-        """List recent events from the current session.
+        """List recent events from memory.
         
         Args:
             max_results: Maximum number of events to retrieve (default: 10).
+            cross_session: If True, retrieves events across all sessions for this actor.
+                          If False, only retrieves events from current session.
             
         Returns:
             List of event dictionaries.
         """
         try:
-            events = self.client.list_events(
-                memory_id=self.memory_id,
-                actor_id=self.actor_id,
-                session_id=self.session_id,
-                max_results=max_results
-            )
+            if cross_session:
+                # Retrieve events across all sessions for this actor
+                events = self.client.list_events(
+                    memory_id=self.memory_id,
+                    actor_id=self.actor_id,
+                    max_results=max_results
+                )
+            else:
+                # Retrieve events from current session only
+                events = self.client.list_events(
+                    memory_id=self.memory_id,
+                    actor_id=self.actor_id,
+                    session_id=self.session_id,
+                    max_results=max_results
+                )
             
-            logger.info(f"Retrieved {len(events) if events else 0} events from session")
+            logger.info(f"Retrieved {len(events) if events else 0} events (cross_session={cross_session})")
             return events if events else []
             
         except ClientError as e:
@@ -126,16 +138,17 @@ class MemorySession:
             logger.error(f"Unexpected error listing events: {e}")
             return []
 
-    def get_conversation_history(self, max_events: int = 5) -> str:
+    def get_conversation_history(self, max_events: int = 5, cross_session: bool = False) -> str:
         """Get formatted conversation history for context.
         
         Args:
             max_events: Maximum number of past events to include.
+            cross_session: If True, includes events from all sessions.
             
         Returns:
             Formatted string of conversation history.
         """
-        events = self.list_events(max_results=max_events)
+        events = self.list_events(max_results=max_events, cross_session=cross_session)
         
         if not events:
             return "No previous conversation history."
