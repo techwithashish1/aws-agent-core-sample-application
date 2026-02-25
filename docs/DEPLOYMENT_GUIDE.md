@@ -99,15 +99,23 @@ See [AgentCore Memory Setup](#agentcore-memory-setup) for details.
 ### Step 5: Setup AgentCore Policy (Optional)
 
 ```bash
+# Fix gateway role trust policy (required before attaching policy engine)
+python -m policy.setup_policy --fix-gateway-role --role-name <gateway-role-name>
+
 # Create policy engine and attach to gateway
 python -m policy.setup_policy --create-engine \
   --gateway-id <gateway-id> \
   --mode ENFORCE \
   --region ap-south-1
 
-# Add policy guardrails
+# IMPORTANT: Permit all tools first (required in ENFORCE mode!)
+python -m policy.setup_policy --permit-all --engine-id <engine-id>
+
+# Add restriction policies (optional)
 python -m policy.setup_policy --add-preset all --engine-id <engine-id>
 ```
+
+> **Note:** In ENFORCE mode, all tools are DENIED by default. You must run `--permit-all` before adding restriction presets.
 
 See [AgentCore Policy Setup](#agentcore-policy-setup) for details.
 

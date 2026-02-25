@@ -414,6 +414,10 @@ def permit_all(args):
     import os
     from pathlib import Path
     
+    # Disable SSL verification for corporate environments with SSL proxies
+    old_ssl = os.environ.get('SSL_VERIFY', 'true')
+    os.environ['SSL_VERIFY'] = 'false'
+    
     # Import here to avoid circular imports
     try:
         from gateway_integration.mcp_client import MCPGatewayClient
@@ -451,10 +455,6 @@ def permit_all(args):
     if has_mcp_client:
         print("\n📋 Querying gateway for available tools...")
         try:
-            # Temporarily disable SSL verification for corporate environments
-            old_ssl = os.environ.get('SSL_VERIFY', 'true')
-            os.environ['SSL_VERIFY'] = 'false'
-            
             config_path = Path(__file__).parent.parent / "agentcore_gateway" / "gateway_config.json"
             client = MCPGatewayClient.from_config(str(config_path))
             
@@ -467,6 +467,7 @@ def permit_all(args):
             
             os.environ['SSL_VERIFY'] = old_ssl
         except Exception as e:
+            os.environ['SSL_VERIFY'] = old_ssl
             print(f"\n⚠️  Could not query gateway tools: {e}")
     
     if not action_names:

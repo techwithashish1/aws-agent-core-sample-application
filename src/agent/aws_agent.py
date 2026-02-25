@@ -190,27 +190,45 @@ def create_langchain_tools() -> List[BaseTool]:
 def load_gateway_tools() -> List[BaseTool]:
     """Load tools from AgentCore Gateway.
     
+    Tries to load gateway config from environment variables first,
+    then falls back to gateway_config.json file.
+    
     Returns:
         List of LangChain tools from gateway, or empty list if unavailable
     """
     try:
         from gateway_integration import MCPGatewayClient, create_gateway_tools
         
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "agentcore_gateway",
-            "gateway_config.json"
-        )
+        client = None
         
-        if not os.path.exists(config_path):
-            logger.warning("gateway_config_not_found", path=config_path)
-            return []
+        # Try environment variables first
+        if os.environ.get('GATEWAY_URL'):
+            logger.info("loading_gateway_from_env")
+            try:
+                client = MCPGatewayClient.from_env()
+                logger.info("gateway_client_created_from_env", 
+                           gateway_url=client.gateway_url,
+                           token_url=client.cognito_token_url)
+            except ValueError as e:
+                logger.warning("gateway_env_incomplete", error=str(e))
         
-        logger.info("loading_gateway_config", path=config_path)
-        client = MCPGatewayClient.from_config(config_path)
-        logger.info("gateway_client_created", 
-                   gateway_url=client.gateway_url,
-                   token_url=client.cognito_token_url)
+        # Fall back to config file
+        if client is None:
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "agentcore_gateway",
+                "gateway_config.json"
+            )
+            
+            if not os.path.exists(config_path):
+                logger.warning("gateway_config_not_found", path=config_path)
+                return []
+            
+            logger.info("loading_gateway_config", path=config_path)
+            client = MCPGatewayClient.from_config(config_path)
+            logger.info("gateway_client_created", 
+                       gateway_url=client.gateway_url,
+                       token_url=client.cognito_token_url)
         
         tools = create_gateway_tools(client)
         logger.info("gateway_tools_loaded", 

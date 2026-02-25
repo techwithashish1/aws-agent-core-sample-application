@@ -9,8 +9,10 @@ import requests
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
-# SSL verification setting (for corporate environments with SSL proxies)
-SSL_VERIFY = os.environ.get('SSL_VERIFY', 'true').lower() != 'false'
+
+def _get_ssl_verify() -> bool:
+    """Get SSL verification setting at runtime (for corporate environments with SSL proxies)."""
+    return os.environ.get('SSL_VERIFY', 'true').lower() != 'false'
 
 
 @dataclass
@@ -63,7 +65,7 @@ class MCPGatewayClient:
             self.cognito_token_url,
             headers=headers,
             data=data,
-            verify=SSL_VERIFY
+            verify=_get_ssl_verify()
         )
         response.raise_for_status()
         
@@ -92,7 +94,7 @@ class MCPGatewayClient:
             self.gateway_url,
             headers=headers,
             json=payload,
-            verify=SSL_VERIFY
+            verify=_get_ssl_verify()
         )
         response.raise_for_status()
         
@@ -153,6 +155,59 @@ class MCPGatewayClient:
             raise Exception(f"Tool call failed: {result['error']}")
         
         return result
+    
+    @classmethod
+    def from_env(cls) -> "MCPGatewayClient":
+        """Create client from environment variables.
+        
+        Required environment variables:
+            GATEWAY_URL: The MCP gateway URL
+            COGNITO_USER_POOL_ID: Cognito user pool ID
+            COGNITO_CLIENT_ID: Cognito app client ID
+            COGNITO_CLIENT_SECRET: Cognito app client secret
+            COGNITO_SCOPE: OAuth scope string
+            
+        Returns:
+            MCPGatewayClient instance
+            
+        Raises:
+            ValueError: If required environment variables are missing
+        """
+        gateway_url = os.environ.get('GATEWAY_URL')
+        user_pool_id = os.environ.get('COGNITO_USER_POOL_ID')
+        client_id = os.environ.get('COGNITO_CLIENT_ID')
+        client_secret = os.environ.get('COGNITO_CLIENT_SECRET')
+        scope = os.environ.get('COGNITO_SCOPE')
+        
+        # Check required variables
+        missing = []
+        if not gateway_url:
+            missing.append('GATEWAY_URL')
+        if not user_pool_id:
+            missing.append('COGNITO_USER_POOL_ID')
+        if not client_id:
+            missing.append('COGNITO_CLIENT_ID')
+        if not client_secret:
+            missing.append('COGNITO_CLIENT_SECRET')
+        if not scope:
+            missing.append('COGNITO_SCOPE')
+            
+        if missing:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+        
+        # Extract region from user pool ID (format: region_poolId)
+        region = user_pool_id.split('_')[0] if '_' in user_pool_id else 'us-east-1'
+        
+        # Build token URL from user_pool_id
+        domain = user_pool_id.lower().replace("_", "")
+        
+        return cls(
+            gateway_url=gateway_url,
+            cognito_token_url=f"https://{domain}.auth.{region}.amazoncognito.com/oauth2/token",
+            client_id=client_id,
+            client_secret=client_secret,
+            scope=scope
+        )
     
     @classmethod
     def from_config(cls, config_path: str) -> "MCPGatewayClient":
